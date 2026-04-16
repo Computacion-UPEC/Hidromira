@@ -1,0 +1,10 @@
+minimalmodbus
+pyserial
+streamlit
+streamlit-autorefresh
+plotly
+numpy
+flask
+flask-cors
+paho-mqtt
+requests
