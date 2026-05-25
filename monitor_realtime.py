@@ -119,9 +119,21 @@ def clasificar_zona(velocidad):
     else:
         return "D", "#d50000"
 
-# ============ LECTURA Y VISUALIZACIÓN ============
+def render_iso_reference():
+    image_path = r"C:\Users\HP\Documents\Nueva carpeta\Hidromira\imagen-22-1-1024x633.jpg.webp"
+    if os.path.exists(image_path):
+        st.image(image_path, use_container_width=True, caption="Referencia ISO 10816-3")
+    else:
+        st.warning("No se encontró la imagen ISO en la ruta esperada.")
 
-st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Norma ISO 20816-3 | Zona A ≤ 0.25 | B ≤ 0.5 | C ≤ 0.75 mm/s")
+def render_turbina_reference():
+    image_path = r"C:\Users\HP\Documents\Nueva carpeta\Hidromira\image.png"
+    if os.path.exists(image_path):
+        st.image(image_path, use_container_width=True, caption="Componentes de la turbina")
+    else:
+        st.warning("No se encontró la imagen de componentes en la ruta esperada.")
+
+# ============ LECTURA Y VISUALIZACIÓN ============
 
 # Leer datos del sensor o generar demostración
 sensor_ok = False
@@ -166,6 +178,9 @@ vz_rms = calcular_rms(st.session_state.buffer_z)
 vmax = max(vx_rms, vy_rms, vz_rms)
 zona, color = clasificar_zona(vmax)
 rpm = calcular_rpm_correlacionado(vmax)
+
+st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Norma ISO 10816-3 | Zona A ≤ 0.25 | B ≤ 0.5 | C ≤ 0.75 mm/s")
+
 
 # ========== PUBLICAR A IoT ==========
 if IOT_AVAILABLE:
@@ -313,4 +328,12 @@ if IOT_AVAILABLE and iot_config.THINGSPEAK_ENABLED:
         if st.session_state.ultimo_envio_thingspeak:
             st.write(f"**Último envío:** {st.session_state.ultimo_envio_thingspeak.strftime('%H:%M:%S')}")
         st.caption("⚠️ ThingSpeak permite 1 envío cada 15 segundos (gratis)")
+
+st.markdown("---")
+st.subheader("📘 Referencia visual ISO 10816-3")
+render_iso_reference()
+
+st.markdown("---")
+st.subheader("🛠️ Componentes de la turbina")
+render_turbina_reference()
 

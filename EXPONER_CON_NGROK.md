@@ -58,6 +58,20 @@ streamlit run monitor_realtime.py --server.port 8503
 C:\ngrok\ngrok.exe http 8503
 ```
 
+### Opción recomendada: script automático
+
+Desde la carpeta del proyecto, puedes lanzar el monitor y ngrok con un solo comando:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\exponer_streamlit_ngrok.ps1 -AppFile monitor_realtime.py -Port 8503
+```
+
+Si quieres exponer el panel de análisis histórico:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\exponer_streamlit_ngrok.ps1 -AppFile app.py -Port 8502
+```
+
 **Salida esperada:**
 ```
 Session Status                online

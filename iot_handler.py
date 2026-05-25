@@ -1,6 +1,7 @@
 import requests
 import json
 import time
+import ssl
 from datetime import datetime
 import paho.mqtt.client as mqtt
 import smtplib
@@ -20,14 +21,30 @@ class IoTHandler:
     def _init_mqtt(self):
         """Inicializar cliente MQTT"""
         try:
-            self.mqtt_client = mqtt.Client(self.config['MQTT_CLIENT_ID'])
+            client_id = self.config.get('MQTT_CLIENT_ID', 'hidromira_sensor')
+            self.mqtt_client = mqtt.Client(client_id=client_id)
+
+            if self.config.get('MQTT_TLS_ENABLED', False):
+                ca_certs = self.config.get('MQTT_TLS_CA_CERT') or None
+                certfile = self.config.get('MQTT_TLS_CLIENT_CERT') or None
+                keyfile = self.config.get('MQTT_TLS_CLIENT_KEY') or None
+
+                self.mqtt_client.tls_set(
+                    ca_certs=ca_certs,
+                    certfile=certfile,
+                    keyfile=keyfile,
+                    tls_version=ssl.PROTOCOL_TLSv1_2,
+                )
+                self.mqtt_client.tls_insecure_set(self.config.get('MQTT_TLS_INSECURE', False))
+
             self.mqtt_client.connect(
                 self.config['MQTT_BROKER'],
                 self.config['MQTT_PORT'],
                 60
             )
             self.mqtt_client.loop_start()
-            print(f"✅ MQTT conectado a {self.config['MQTT_BROKER']}")
+            modo = "TLS 1.2" if self.config.get('MQTT_TLS_ENABLED', False) else "sin TLS"
+            print(f"✅ MQTT conectado a {self.config['MQTT_BROKER']}:{self.config['MQTT_PORT']} ({modo})")
         except Exception as e:
             print(f"❌ Error MQTT: {e}")
             self.mqtt_client = None
@@ -164,17 +181,17 @@ class IoTHandler:
         
         # Determinar nivel de urgencia
         if zona == 'D':
-            emoji = "🚫"
-            nivel = "CRÍTICO"
-            accion = "DETENER MÁQUINA INMEDIATAMENTE"
-        elif zona == 'C':
             emoji = "🔴"
-            nivel = "ALTA"
+            nivel = "ROJA"
+            accion = "Fallo catastrófico: detener la máquina inmediatamente"
+        elif zona == 'C':
+            emoji = "🟠"
+            nivel = "NARANJA"
             accion = "Requiere corrección urgente"
         elif zona == 'B':
-            emoji = "⚠️"
-            nivel = "MEDIA"
-            accion = "Vigilancia recomendada"
+            emoji = "🟡"
+            nivel = "AMARILLA"
+            accion = "Vibraciones anómalas detectadas: vigilancia recomendada"
         else:
             return  # No alertar en zona A
         
@@ -200,8 +217,8 @@ class IoTHandler:
         if self.config.get('TELEGRAM_ENABLED', False):
             self.enviar_telegram(mensaje.replace('<b>', '*').replace('</b>', '*').replace('<i>', '_').replace('</i>', '_'))
         
-        # Enviar por Email
-        if self.config.get('EMAIL_ENABLED', False):
+        # Enviar por Email solo para alertas amarilla y roja
+        if self.config.get('EMAIL_ENABLED', False) and zona in ('B', 'D'):
             self.enviar_email(
                 f"ALERTA {nivel}: Zona {zona} - {vmax:.3f} mm/s",
                 mensaje

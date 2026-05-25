@@ -81,3 +81,23 @@ numpy
 ```
 
 Instalar: `pip install streamlit-autorefresh`
+
+## 🔁 Iniciar API REST con Uvicorn (opcional)
+
+Para un servidor ASGI más rápido y preparación para producción puedes usar `uvicorn`.
+
+1. Instala `uvicorn` (ya incluido en `requirements.txt` si seguiste los pasos anteriores):
+
+```bash
+pip install uvicorn
+```
+
+2. Ejecuta la API (archivo `api_rest.py`):
+
+```bash
+# Ejecutar localmente en el puerto configurado en iot_config.py (por defecto 5000)
+python -m uvicorn api_rest:app --host 0.0.0.0 --port 5000
+```
+
+Nota: En Windows no es necesario instalar `uvloop` (no soportado); `uvicorn` funciona correctamente con la loop de Python por defecto.
+
