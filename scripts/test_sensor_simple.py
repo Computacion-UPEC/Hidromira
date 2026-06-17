@@ -1,6 +1,6 @@
 """
 Script simple para probar comunicación con sensor WTVB01-485
-Sin Streamlit - solo lectura directa del puerto COM3
+Sin Streamlit - solo lectura directa del puerto COM8
 """
 import minimalmodbus
 import serial
@@ -9,7 +9,7 @@ import time
 print("🔧 PRUEBA SIMPLE DEL SENSOR WTVB01-485")
 print("="*60)
 print("\n📋 Configuración:")
-print("   Puerto: COM3")
+print("   Puerto: COM8")
 print("   Dirección ModBus: 80 (0x50)")
 print("   Baudrate: 9600")
 print("   Registros: 0x3D (Vx), 0x3E (Vy), 0x3F (Vz)")
@@ -17,7 +17,7 @@ print("\n🔌 Conectando al sensor...")
 
 try:
     # Configurar sensor
-    sensor = minimalmodbus.Instrument('COM3', 80)
+    sensor = minimalmodbus.Instrument('COM8', 80)
     sensor.serial.baudrate = 9600
     sensor.serial.bytesize = 8
     sensor.serial.parity = serial.PARITY_NONE
@@ -26,7 +26,7 @@ try:
     sensor.mode = minimalmodbus.MODE_RTU
     sensor.clear_buffers_before_each_transaction = True
     
-    print("✅ Puerto COM3 abierto correctamente")
+    print("✅ Puerto COM8 abierto correctamente")
     print("\n📊 Intentando leer registros...")
     
     # Intentar leer registro de prueba
@@ -78,7 +78,7 @@ except minimalmodbus.NoResponseError:
     print("\n❌ ERROR: No hay respuesta del sensor")
     print("\n🔍 Posibles causas:")
     print("   1. Dirección ModBus incorrecta (actual: 80)")
-    print("      → Prueba con dirección 1: Modifica línea 20 a: sensor = minimalmodbus.Instrument('COM3', 1)")
+    print("      → Prueba con dirección 1: Modifica línea 20 a: sensor = minimalmodbus.Instrument('COM8', 1)")
     print("   2. Baudrate incorrecto (actual: 9600)")
     print("      → Prueba con 19200: Modifica línea 21 a: sensor.serial.baudrate = 19200")
     print("   3. Sensor apagado o desconectado")
@@ -88,7 +88,7 @@ except minimalmodbus.NoResponseError:
 except serial.SerialException as e:
     print(f"\n❌ ERROR DE PUERTO SERIAL: {e}")
     print("\n🔍 Posibles causas:")
-    print("   1. COM3 ocupado por otra aplicación")
+    print("   1. COM8 ocupado por otra aplicación")
     print("      → Cierra Streamlit monitor si está corriendo")
     print("   2. Puerto COM incorrecto")
     print("      → Verifica en Administrador de Dispositivos")

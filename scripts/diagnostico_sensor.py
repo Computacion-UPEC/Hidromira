@@ -21,9 +21,9 @@ else:
 
 # 2. Configuraciones a probar
 configuraciones = [
-    {'puerto': 'COM3', 'direccion': 80, 'baudrate': 9600, 'timeout': 1.0},
-    {'puerto': 'COM3', 'direccion': 1, 'baudrate': 9600, 'timeout': 1.0},
-    {'puerto': 'COM3', 'direccion': 80, 'baudrate': 19200, 'timeout': 1.0},
+    {'puerto': 'COM8', 'direccion': 80, 'baudrate': 9600, 'timeout': 1.0},
+    {'puerto': 'COM8', 'direccion': 1, 'baudrate': 9600, 'timeout': 1.0},
+    {'puerto': 'COM8', 'direccion': 80, 'baudrate': 19200, 'timeout': 1.0},
 ]
 
 print("\n🧪 Probando configuraciones...\n")
@@ -96,7 +96,7 @@ print("=" * 70)
 print("\n💡 RECOMENDACIONES:")
 print("\n1. Verifica que el sensor esté encendido")
 print("2. Verifica el cable RS485 (A → A+, B → B-)")
-print("3. Cierra otras aplicaciones usando COM3")
+print("3. Cierra otras aplicaciones usando COM8")
 print("4. Verifica la dirección ModBus del sensor (0x50 = 80 decimal)")
 print("5. Si nada funciona, intenta con software WitMotion oficial")
 print("\n📚 Documentación WTVB01-485:")

@@ -31,7 +31,7 @@ for direccion in direcciones:
             
             try:
                 # Configurar sensor
-                sensor = minimalmodbus.Instrument('COM3', direccion)
+                sensor = minimalmodbus.Instrument('COM8', direccion)
                 sensor.serial.baudrate = baudrate
                 sensor.serial.bytesize = 8
                 sensor.serial.parity = serial.PARITY_NONE
@@ -109,7 +109,7 @@ if configuracion_exitosa:
     print("✅ SENSOR FUNCIONANDO - Actualiza monitor_realtime.py con:")
     print("="*70)
     print(f"\nCambia línea ~80-81:")
-    print(f"   sensor = minimalmodbus.Instrument('COM3', {configuracion_exitosa['direccion']})")
+    print(f"   sensor = minimalmodbus.Instrument('COM8', {configuracion_exitosa['direccion']})")
     print(f"   sensor.serial.baudrate = {configuracion_exitosa['baudrate']}")
     print(f"\nCambia líneas de lectura (~125-130):")
     print(f"   vx = sensor.read_register(61, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
@@ -124,7 +124,7 @@ else:
     print("   2. ✅ Cable RS485 conectado correctamente:")
     print("      • Terminal A del sensor → Terminal A del adaptador")
     print("      • Terminal B del sensor → Terminal B del adaptador")
-    print("   3. ✅ Adaptador USB-RS485 conectado a COM3")
+    print("   3. ✅ Adaptador USB-RS485 conectado a COM8")
     print("   4. ⚠️ Sensor puede requerir configuración con software WitMotion")
     print("      • Descarga: https://wit-motion.yuque.com/wumwnr/ltst94")
     print("      • Configura dirección ModBus y baudrate")

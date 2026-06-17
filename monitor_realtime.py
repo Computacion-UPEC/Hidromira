@@ -87,9 +87,9 @@ if 'ultimo_envio_thingspeak' not in st.session_state:
 
 @st.cache_resource
 def conectar():
-    logger.info("[RT] Intentando conectar con el sensor ModBus WTVB01-485 en COM3...")
+    logger.info("[RT] Intentando conectar con el sensor ModBus WTVB01-485 en COM8...")
     try:
-        sensor = minimalmodbus.Instrument('COM3', 80)
+        sensor = minimalmodbus.Instrument('COM8', 80)
         sensor.serial.baudrate = 9600
         sensor.serial.bytesize = 8
         sensor.serial.parity = serial.PARITY_NONE
@@ -102,7 +102,7 @@ def conectar():
         for intento in range(3):
             try:
                 _ = sensor.read_register(61, functioncode=3)
-                logger.info(f"[RT] ✅ Sensor ModBus conectado exitosamente en COM3 (intento {intento + 1})")
+                logger.info(f"[RT] ✅ Sensor ModBus conectado exitosamente en COM8 (intento {intento + 1})")
                 return sensor
             except Exception as e:
                 if intento < 2:
@@ -113,17 +113,17 @@ def conectar():
                     raise e
         return sensor
     except Exception as e:
-        logger.error(f"[RT] ❌ No se pudo conectar al sensor ModBus en COM3: {e}")
+        logger.error(f"[RT] ❌ No se pudo conectar al sensor ModBus en COM8: {e}")
         return None
 
 sensor = conectar()
 
 # Mostrar estado de conexión
 if sensor:
-    st.success("✅ Sensor WTVB01-485 conectado en COM3")
+    st.success("✅ Sensor WTVB01-485 conectado en COM8")
 else:
     st.error("❌ Sensor no disponible - Generando datos de demostración")
-    st.warning("💡 Para usar el sensor real: Cierra otras apps que usen COM3 y reinicia el monitor")
+    st.warning("💡 Para usar el sensor real: Cierra otras apps que usen COM8 y reinicia el monitor")
 
 st.caption("")
 
