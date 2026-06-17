@@ -15,6 +15,22 @@
 - **Tab 2**: Datos Técnicos (specs de turbina + mantenimiento)
 - **Tab 3**: Rendimiento vs Vibraciones (análisis predictivo)
 
+## 🔐 Autenticación y Roles
+
+Las dos apps usan autenticación local con roles:
+
+- `tecnico`: acceso de lectura a los paneles de análisis y monitoreo.
+- `admin`: acceso completo, incluido registro de mantenimiento.
+- `ingeniero_jefe`: acceso completo, incluido registro de mantenimiento.
+
+La primera vez que se ejecuta la app se crea `users.json` con cuentas iniciales de prueba:
+
+- `tecnico1` / `Tecnico123!`
+- `admin` / `Admin123!`
+- `jefe` / `Jefe123!`
+
+Puedes editar `users.json` después para cambiar nombres, roles o credenciales.
+
 ## 🚀 Cómo Ejecutar
 
 ### Opción 1: Dos Terminales Separados (RECOMENDADO)

@@ -65,7 +65,7 @@ def configurar_sensor():
     """Abre conexión serial SIN CACHE para permitir reconexión"""
     try:
         ser = serial.Serial(
-            port='COM4',
+            port='COM3',
             baudrate=9600,
             bytesize=serial.EIGHTBITS,
             parity=serial.PARITY_NONE,
@@ -75,10 +75,10 @@ def configurar_sensor():
         )
         if not ser.is_open:
             ser.open()
-        print(f'[SENSOR] COM4 abierto exitosamente', flush=True)
+        print(f'[SENSOR] COM3 abierto exitosamente', flush=True)
         return ser
     except Exception as e:
-        print(f'[SENSOR] Error abriendo COM4: {e}', flush=True)
+        print(f'[SENSOR] Error abriendo COM3: {e}', flush=True)
         return None
 
 
@@ -254,10 +254,10 @@ if has_sensor:
         while True:
             try:
                 if local_sensor is None or not local_sensor.is_open:
-                    print('[BG] Abriendo conexión COM4...', flush=True)
+                    print('[BG] Abriendo conexión COM3...', flush=True)
                     local_sensor = configurar_sensor()
                     if local_sensor is None:
-                        raise Exception('No se pudo abrir COM4')
+                        raise Exception('No se pudo abrir COM3')
                 
                 # Leer velocidad usando protocolo nativo WitMotion
                 vx, vy, vz = read_witmotion_velocity(local_sensor, device_addr=0x50)
@@ -340,7 +340,7 @@ if has_sensor:
                 st.sidebar.success(f'✅ Lectura exitosa: VX={t_vx:.2f}, VY={t_vy:.2f}, VZ={t_vz:.2f} mm/s')
                 test_sensor.close()
             else:
-                st.sidebar.error('❌ No se pudo abrir COM4')
+                st.sidebar.error('❌ No se pudo abrir COM3')
         except Exception as e:
             st.sidebar.error(f'❌ Error: {str(e)[:100]}')
 
@@ -699,5 +699,5 @@ if has_sensor:
         st.rerun()
 
 else:
-    st.error("❌ No se pudo detectar el sensor en COM4.")
-    st.info("Verifica que:\n1. El adaptador RS485 esté conectado\n2. COM4 sea el puerto correcto\n3. WitMotion esté cerrado")
+    st.error("❌ No se pudo detectar el sensor en COM3.")
+    st.info("Verifica que:\n1. El adaptador RS485 esté conectado\n2. COM3 sea el puerto correcto\n3. WitMotion esté cerrado")

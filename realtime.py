@@ -20,8 +20,8 @@ if 'buffer_z' not in st.session_state:
 @st.cache_resource
 def conectar():
     try:
-        # Usamos COM4 y 0x50 porque es lo que WitMotion y tu código usan
-        sensor = minimalmodbus.Instrument('COM4', 80) # 0x50 es 80 decimal
+        # Usamos COM3 y 0x50 porque es lo que WitMotion y tu código usan
+        sensor = minimalmodbus.Instrument('COM3', 80) # 0x50 es 80 decimal
         sensor.serial.baudrate = 9600
         sensor.serial.timeout = 0.5
         return sensor
@@ -126,4 +126,4 @@ if sensor:
                     break
                 error_count = 0
 else:
-    st.error("No se pudo abrir el COM4. WitMotion DEBE estar cerrado.")
+    st.error("No se pudo abrir el COM3. WitMotion DEBE estar cerrado.")

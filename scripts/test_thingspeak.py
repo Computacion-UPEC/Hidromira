@@ -2,6 +2,11 @@
 Script de prueba para ThingSpeak
 Envía un dato de prueba para verificar la conexión
 """
+import sys
+import os
+# Añadir la carpeta raíz al path para poder importar iot_config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import requests
 import iot_config
 

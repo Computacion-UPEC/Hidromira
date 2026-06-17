@@ -7,58 +7,61 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import sys
+import os
+# Añadir la carpeta raíz al path para poder importar iot_config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-print("📧 PRUEBA DE ALERTAS POR GMAIL")
+print("[EMAIL] PRUEBA DE ALERTAS POR GMAIL")
 print("="*70)
 
 # Importar configuración
 try:
     import iot_config
-    print("✅ Archivo iot_config.py cargado correctamente")
+    print("[OK] Archivo iot_config.py cargado correctamente")
 except Exception as e:
-    print(f"❌ Error al cargar iot_config.py: {e}")
+    print(f"[ERROR] Error al cargar iot_config.py: {e}")
     input("Presiona Enter para salir...")
     sys.exit(1)
 
 # Verificar configuración
-print("\n📋 VERIFICACIÓN DE CONFIGURACIÓN:")
+print("\n[CONFIG] VERIFICACIÓN DE CONFIGURACIÓN:")
 print("-"*70)
 
 if not iot_config.EMAIL_ENABLED:
-    print("❌ EMAIL_ENABLED = False")
+    print("[ERROR] EMAIL_ENABLED = False")
     print("   Cambia a: EMAIL_ENABLED = True en iot_config.py")
     input("Presiona Enter para salir...")
     sys.exit(1)
 else:
-    print("✅ EMAIL_ENABLED = True")
+    print("[OK] EMAIL_ENABLED = True")
 
-print(f"📧 EMAIL_FROM: {iot_config.EMAIL_FROM}")
+print(f"[FROM] EMAIL_FROM: {iot_config.EMAIL_FROM}")
 if "TU_EMAIL" in iot_config.EMAIL_FROM.upper() or "@" not in iot_config.EMAIL_FROM:
-    print("   ⚠️ Debes configurar tu email real de Gmail")
+    print("   [WARN] Debes configurar tu email real de Gmail")
     print("   Ejemplo: juan.perez@gmail.com")
     input("Presiona Enter para salir...")
     sys.exit(1)
 
-print(f"🔑 EMAIL_PASSWORD: {'*' * len(iot_config.EMAIL_PASSWORD)}")
+print(f"[KEY] EMAIL_PASSWORD: {'*' * len(iot_config.EMAIL_PASSWORD)}")
 if "TU_CONTRASEÑA" in iot_config.EMAIL_PASSWORD.upper() or len(iot_config.EMAIL_PASSWORD) < 10:
-    print("   ⚠️ Debes configurar tu contraseña de aplicación de Gmail")
+    print("   [WARN] Debes configurar tu contraseña de aplicación de Gmail")
     print("   NO uses tu contraseña normal - genera una contraseña de aplicación:")
     print("   https://myaccount.google.com/apppasswords")
     input("Presiona Enter para salir...")
     sys.exit(1)
 
-print(f"📬 EMAIL_TO: {iot_config.EMAIL_TO}")
+print(f"[TO] EMAIL_TO: {iot_config.EMAIL_TO}")
 if any("ejemplo" in email.lower() or "TU_EMAIL" in email.upper() for email in iot_config.EMAIL_TO):
-    print("   ⚠️ Debes configurar emails reales para recibir alertas")
+    print("   [WARN] Debes configurar emails reales para recibir alertas")
     input("Presiona Enter para salir...")
     sys.exit(1)
 
-print(f"🌐 SMTP_SERVER: {iot_config.EMAIL_SMTP_SERVER}:{iot_config.EMAIL_SMTP_PORT}")
+print(f"[SMTP] SMTP_SERVER: {iot_config.EMAIL_SMTP_SERVER}:{iot_config.EMAIL_SMTP_PORT}")
 
-print("\n✅ Configuración básica correcta")
+print("\n[OK] Configuración básica correcta")
 
 # Intentar enviar email de prueba
-print("\n📤 ENVIANDO EMAIL DE PRUEBA...")
+print("\n[SEND] ENVIANDO EMAIL DE PRUEBA...")
 print("-"*70)
 
 try:
@@ -106,9 +109,9 @@ try:
             
             <h3 style="color: #333; margin-top: 30px;">⚠️ Tipos de Alertas Configuradas</h3>
             <ul style="line-height: 1.8;">
-                <li><strong>Zona B (Amarillo):</strong> {'✅ Activa' if iot_config.ALERT_ZONA_B else '❌ Desactivada'} - Vigilancia (> 0.25 mm/s)</li>
-                <li><strong>Zona C (Naranja):</strong> {'✅ Activa' if iot_config.ALERT_ZONA_C else '❌ Desactivada'} - Corrección necesaria (> 0.5 mm/s)</li>
-                <li><strong>Zona D (Rojo):</strong> {'✅ Activa' if iot_config.ALERT_ZONA_D else '❌ Desactivada'} - Inaceptable (> 0.75 mm/s)</li>
+                <li><strong>Zona B (Amarillo):</strong> {'[OK] Activa' if iot_config.ALERT_ZONA_B else '[ERROR] Desactivada'} - Vigilancia (> 0.25 mm/s)</li>
+                <li><strong>Zona C (Naranja):</strong> {'[OK] Activa' if iot_config.ALERT_ZONA_C else '[ERROR] Desactivada'} - Corrección necesaria (> 0.5 mm/s)</li>
+                <li><strong>Zona D (Rojo):</strong> {'[OK] Activa' if iot_config.ALERT_ZONA_D else '[ERROR] Desactivada'} - Inaceptable (> 0.75 mm/s)</li>
             </ul>
             
             <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; border-left: 4px solid #2196f3; margin-top: 20px;">
@@ -127,48 +130,48 @@ try:
     
     msg.attach(MIMEText(html_body, 'html'))
     
-    print("1/4 Creando mensaje HTML... ✅")
+    print("1/4 Creando mensaje HTML... [OK]")
     
     # Conectar al servidor SMTP
     print(f"2/4 Conectando a {iot_config.EMAIL_SMTP_SERVER}:{iot_config.EMAIL_SMTP_PORT}... ", end='', flush=True)
     server = smtplib.SMTP(iot_config.EMAIL_SMTP_SERVER, iot_config.EMAIL_SMTP_PORT)
-    print("✅")
+    print("[OK]")
     
     # Iniciar TLS
     print("3/4 Iniciando cifrado TLS... ", end='', flush=True)
     server.starttls()
-    print("✅")
+    print("[OK]")
     
     # Login
     print("4/4 Autenticando con Gmail... ", end='', flush=True)
     server.login(iot_config.EMAIL_FROM, iot_config.EMAIL_PASSWORD)
-    print("✅")
+    print("[OK]")
     
     # Enviar
-    print("📤 Enviando email... ", end='', flush=True)
+    print("[SEND] Enviando email... ", end='', flush=True)
     server.send_message(msg)
-    print("✅")
+    print("[OK]")
     
     server.quit()
     
     print("\n" + "="*70)
-    print("🎉 ¡ÉXITO! EMAIL ENVIADO CORRECTAMENTE")
+    print("[SUCCESS] ¡ÉXITO! EMAIL ENVIADO CORRECTAMENTE")
     print("="*70)
-    print(f"\n✅ Revisa tu bandeja de entrada: {iot_config.EMAIL_TO[0]}")
+    print(f"\n[OK] Revisa tu bandeja de entrada: {iot_config.EMAIL_TO[0]}")
     print("   (Si no lo ves, revisa SPAM/Promociones)")
-    print("\n💡 El sistema ahora enviará alertas automáticamente cuando:")
+    print("\n[INFO] El sistema ahora enviará alertas automáticamente cuando:")
     print("   • Vibración entre en Zona B (> 0.25 mm/s) - Vigilancia")
     print("   • Vibración entre en Zona C (> 0.5 mm/s) - Corrección")
     print("   • Vibración entre en Zona D (> 0.75 mm/s) - Inaceptable")
-    print(f"\n⏱️ Tiempo entre alertas repetidas: {iot_config.ALERT_COOLDOWN // 60} minutos")
-    print("\n✅ El monitor en tiempo real ya tiene alertas por email habilitadas")
+    print(f"\n[COOLDOWN] Tiempo entre alertas repetidas: {iot_config.ALERT_COOLDOWN // 60} minutos")
+    print("\n[OK] El monitor en tiempo real ya tiene alertas por email habilitadas")
 
 except smtplib.SMTPAuthenticationError:
     print("\n" + "="*70)
-    print("❌ ERROR DE AUTENTICACIÓN")
+    print("[ERROR] ERROR DE AUTENTICACIÓN")
     print("="*70)
-    print("\n🔍 PROBLEMA: Gmail rechazó tu usuario/contraseña")
-    print("\n✅ SOLUCIÓN:")
+    print("\n[DEBUG] PROBLEMA: Gmail rechazó tu usuario/contraseña")
+    print("\n[SOLUTION] SOLUCIÓN:")
     print("   1. Verifica que EMAIL_FROM sea correcto:")
     print(f"      Actual: {iot_config.EMAIL_FROM}")
     print("   2. Usa una CONTRASEÑA DE APLICACIÓN (NO tu contraseña normal):")
@@ -180,14 +183,18 @@ except smtplib.SMTPAuthenticationError:
     print("      https://myaccount.google.com/security")
 
 except smtplib.SMTPException as e:
-    print(f"\n❌ ERROR SMTP: {e}")
-    print("\n🔍 Verifica tu configuración de Gmail")
+    print(f"\n[ERROR] ERROR SMTP: {e}")
+    print("\n[DEBUG] Verifica tu configuración de Gmail")
 
 except Exception as e:
-    print(f"\n❌ ERROR INESPERADO: {type(e).__name__}")
+    print(f"\n[ERROR] ERROR INESPERADO: {type(e).__name__}")
     print(f"   Mensaje: {str(e)}")
-    print("\n📝 Detalles para depuración:")
+    print("\n[DEBUG] Detalles para depuración:")
     import traceback
     traceback.print_exc()
 
-input("\n👋 Presiona Enter para salir...")
+# En entornos de script interactivo
+if sys.stdin.isatty():
+    input("\n👋 Presiona Enter para salir...")
+else:
+    print("\nProceso finalizado.")

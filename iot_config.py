@@ -24,18 +24,21 @@ WEBHOOK_ENABLED = False
 WEBHOOK_URL = "https://tu-servidor.com/api/datos"
 
 # ========== EMAIL (Alertas por correo) ==========
-EMAIL_ENABLED = False  # ⚠️ DESACTIVADO (error de conexión SMTP)
+EMAIL_ENABLED = True  # ✅ ACTIVADO
 EMAIL_SMTP_SERVER = "smtp.gmail.com"
 EMAIL_SMTP_PORT = 587
 EMAIL_FROM = "ggeta13basantes@gmail.com"  # ⚠️ CONFIGURA AQUÍ TU EMAIL
-EMAIL_PASSWORD = "xxjk azjz upnu ckkp"  # ⚠️ CONTRASEÑA DE APLICACIÓN (NO tu contraseña normal)
-EMAIL_TO = ["ggeta13basantes@gmail.com"]  # ⚠️ Email(s) para recibir alertas
+EMAIL_PASSWORD = "bdak yieq cwei rzxg"  # ⚠️ CONTRASEÑA DE APLICACIÓN (NO tu contraseña normal)
+EMAIL_TO = ["ggeta13basantes@gmail.com", "geovanny.basantesq@gmail.com"]  # ⚠️ Email(s) para recibir alertas
 
 # ========== CONFIGURACIÓN DE ALERTAS ==========
 ALERT_ZONA_B = True   # Alertar en zona B (vigilancia)
 ALERT_ZONA_C = True   # Alertar en zona C (corrección)
 ALERT_ZONA_D = True   # Alertar en zona D (inaceptable)
 ALERT_COOLDOWN = 300  # Segundos entre alertas repetidas (5 min)
+
+# ========== CONFIGURACIÓN DE ACCESO REMOTO (NGROK) ==========
+NGROK_URL = "https://3f33-190-15-129-108.ngrok-free.app/"
 
 # ========== API REST ==========
 API_ENABLED = True

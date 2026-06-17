@@ -23,7 +23,6 @@ else:
 configuraciones = [
     {'puerto': 'COM3', 'direccion': 80, 'baudrate': 9600, 'timeout': 1.0},
     {'puerto': 'COM3', 'direccion': 1, 'baudrate': 9600, 'timeout': 1.0},
-    {'puerto': 'COM4', 'direccion': 80, 'baudrate': 9600, 'timeout': 1.0},
     {'puerto': 'COM3', 'direccion': 80, 'baudrate': 19200, 'timeout': 1.0},
 ]
 

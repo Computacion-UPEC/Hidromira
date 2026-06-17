@@ -9,19 +9,55 @@ import os
 from datetime import datetime
 import numpy as np
 from streamlit_autorefresh import st_autorefresh
+import logging
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+    handlers=[
+        logging.FileHandler("hidromira.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("HidroMiraRealtime")
+
+from auth import get_role_label, require_login, render_user_panel
 
 # Importar módulos IoT
 try:
     import iot_config
-    from iot_handler import IoTHandler
-    iot_handler = IoTHandler(vars(iot_config))
-    IOT_AVAILABLE = True
+    IOT_CONFIG_AVAILABLE = True
 except Exception as e:
-    print(f"IoT no disponible: {e}")
-    IOT_AVAILABLE = False
+    logger.error(f"iot_config no disponible en monitor: {e}")
+    IOT_CONFIG_AVAILABLE = False
+
+@st.cache_resource
+def get_iot_handler():
+    try:
+        if IOT_CONFIG_AVAILABLE:
+            from iot_handler import IoTHandler
+            return IoTHandler(vars(iot_config))
+    except Exception as e:
+        logger.error(f"Error inicializando IoTHandler en monitor: {e}")
+        return None
+
+iot_handler = get_iot_handler()
+IOT_AVAILABLE = iot_handler is not None
 
 st.set_page_config(page_title="HidroMira - Monitor Tiempo Real", layout="wide")
+
+current_user = require_login(app_name="HidroMira - Monitor Tiempo Real")
+
+# Registrar login en logs una sola vez por sesión
+if 'login_logged' not in st.session_state:
+    logger.info(f"[RT] Usuario autenticado: {current_user['username']} (Rol: {get_role_label(current_user['role'])})")
+    st.session_state.login_logged = True
+
+render_user_panel()
+
 st.title("⚡ Monitoreo en Tiempo Real")
+st.caption(f"Usuario: {current_user['display_name']} | Rol: {get_role_label(current_user['role'])}")
 
 # Auto-refresh cada 500ms
 count = st_autorefresh(interval=500, key="realtime_refresh")
@@ -51,6 +87,7 @@ if 'ultimo_envio_thingspeak' not in st.session_state:
 
 @st.cache_resource
 def conectar():
+    logger.info("[RT] Intentando conectar con el sensor ModBus WTVB01-485 en COM3...")
     try:
         sensor = minimalmodbus.Instrument('COM3', 80)
         sensor.serial.baudrate = 9600
@@ -65,17 +102,18 @@ def conectar():
         for intento in range(3):
             try:
                 _ = sensor.read_register(61, functioncode=3)
-                print(f"✅ Sensor conectado en intento {intento + 1}")
+                logger.info(f"[RT] ✅ Sensor ModBus conectado exitosamente en COM3 (intento {intento + 1})")
                 return sensor
             except Exception as e:
                 if intento < 2:
+                    logger.warning(f"[RT] Intento {intento + 1} de conexión ModBus fallido: {e}. Reintentando...")
                     time.sleep(0.5)
                     continue
                 else:
                     raise e
         return sensor
     except Exception as e:
-        print(f"⚠️ Sensor error: {str(e)[:100]}")
+        logger.error(f"[RT] ❌ No se pudo conectar al sensor ModBus en COM3: {e}")
         return None
 
 sensor = conectar()
@@ -138,6 +176,7 @@ if sensor:
         error_msg = str(e)
         # Solo mostrar error cada 10 lecturas para no saturar
         if len(st.session_state.all_readings) % 10 == 0:
+            logger.error(f"[RT] Error de comunicación con el sensor ModBus: {error_msg[:80]}")
             st.error(f"⚠️ Error comunicación sensor: {error_msg[:80]}")
         # Usar datos de demostración
         vx = 0.15 + 0.05 * np.sin(time.time() * 0.5)
@@ -170,16 +209,22 @@ rpm = calcular_rpm_correlacionado(vmax)
 # ========== PUBLICAR A IoT ==========
 if IOT_AVAILABLE:
     try:
+        # Cargar configuración de correo actualizada por app.py en caliente
+        iot_handler.load_email_config()
+        
         # Publicar datos cada lectura (ThingSpeak tiene límite de 1 envío cada 15 segundos)
         # Solo enviar cada 30 lecturas (aprox 15 segundos a 0.5s por lectura)
         if len(st.session_state.all_readings) % 30 == 0:
             # Enviar a ThingSpeak
             if iot_config.THINGSPEAK_ENABLED:
+                logger.info(f"[RT] Publicando a ThingSpeak: vx={vx:.3f}, vy={vy:.3f}, vz={vz:.3f}, rms={vmax:.3f}")
                 resultado = iot_handler.enviar_thingspeak(vx, vy, vz, vmax, zona)
                 if resultado:
+                    logger.info("[RT] Envío a ThingSpeak exitoso.")
                     st.session_state.iot_envios_ok += 1
                     st.session_state.ultimo_envio_thingspeak = datetime.now()
                 else:
+                    logger.warning("[RT] Envío a ThingSpeak rechazado (tasa de límite superada o API key errónea).")
                     st.session_state.iot_envios_error += 1
         
         # Publicar a MQTT/Webhook cada lectura (sin rate limit)
@@ -188,10 +233,12 @@ if IOT_AVAILABLE:
         
         # Verificar y enviar alertas si es necesario
         if iot_handler.verificar_alerta(zona, vmax):
+            logger.critical(f"[RT] ⚠️ Alerta ISO 20816-3 Zona {zona} detectada con vmax={vmax:.3f}! Enviando avisos...")
             iot_handler.enviar_alerta_completa(zona, vmax, vx, vy, vz)
+            logger.info("[RT] Alertas enviadas con éxito.")
     except Exception as e:
+        logger.error(f"[RT] Error IoT: {e}")
         st.session_state.iot_envios_error += 1
-        print(f"Error IoT: {e}")
 
 # Guardar cada 50 lecturas
 if len(st.session_state.all_readings) % 50 == 0:
@@ -199,8 +246,9 @@ if len(st.session_state.all_readings) % 50 == 0:
         path = os.path.join(os.path.dirname(__file__), 'historical_data.json')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(st.session_state.all_readings, f, indent=2)
-    except:
-        pass
+        logger.info(f"[RT] Histórico guardado automáticamente. Total registros: {len(st.session_state.all_readings)}")
+    except Exception as e:
+        logger.error(f"[RT] Error al guardar histórico en historical_data.json: {e}")
 
 col1, col2 = st.columns([1, 3])
 

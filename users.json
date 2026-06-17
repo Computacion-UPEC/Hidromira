@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "username": "tecnico1",
+      "display_name": "Técnico de Planta",
+      "role": "tecnico",
+      "salt": "587590697f406e3c7a28a86ba3c53439",
+      "password_hash": "c0128be612abc9034439bec791f34c6b72b71c444c54d63093660ac2c29d284e",
+      "active": true
+    },
+    {
+      "username": "admin",
+      "display_name": "Administrador",
+      "role": "admin",
+      "salt": "1b3576760d32032cb898fb85a1c6dfe0",
+      "password_hash": "37c6d969c9da60906a653f5ba4162dd525550fc26fd08034d582cd4f298481a8",
+      "active": true
+    },
+    {
+      "username": "jefe",
+      "display_name": "Ingeniero en Jefe",
+      "role": "ingeniero_jefe",
+      "salt": "6b238a53f050a7207b51982921d4b617",
+      "password_hash": "65c9f64f74dcb90d4afc6efa2a92903082655945b8b09b69721060278f94dca9",
+      "active": true
+    }
+  ]
+}

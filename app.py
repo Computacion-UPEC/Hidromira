@@ -1,4 +1,5 @@
 import streamlit as st
+# pyrefly: ignore [missing-import]
 import minimalmodbus
 import plotly.graph_objects as go
 from collections import deque
@@ -7,9 +8,55 @@ import json
 import os
 from datetime import datetime, timedelta
 import numpy as np
+import serial
+import serial.tools.list_ports
+from streamlit_autorefresh import st_autorefresh
+import logging
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+    handlers=[
+        logging.FileHandler("hidromira.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("HidroMiraApp")
+
+from auth import get_role_label, require_login, render_user_panel, require_role
+
+# Importar módulos IoT
+try:
+    import iot_config
+    IOT_CONFIG_AVAILABLE = True
+except Exception as e:
+    logger.error(f"iot_config no disponible: {e}")
+    IOT_CONFIG_AVAILABLE = False
+
+@st.cache_resource
+def get_iot_handler():
+    try:
+        if IOT_CONFIG_AVAILABLE:
+            from iot_handler import IoTHandler
+            return IoTHandler(vars(iot_config))
+    except Exception as e:
+        logger.error(f"Error inicializando IoTHandler: {e}")
+        return None
+
+iot_handler = get_iot_handler()
+IOT_AVAILABLE = iot_handler is not None
 
 st.set_page_config(page_title="HidroMira IoT", layout="wide")
-st.title("🌊 HidroMira - Monitoreo de Vibración")
+
+current_user = require_login(app_name="HidroMira - Panel de Operación e IoT")
+
+# Registrar login en logs una sola vez por sesión
+if 'login_logged' not in st.session_state:
+    logger.info(f"Usuario autenticado: {current_user['username']} (Rol: {get_role_label(current_user['role'])})")
+    st.session_state.login_logged = True
+
+render_user_panel()
 
 # ============ INICIALIZACIÓN SESSION STATE ============
 
@@ -45,6 +92,31 @@ if 'last_tab1_refresh' not in st.session_state:
 
 if 'tab1_needs_refresh' not in st.session_state:
     st.session_state.tab1_needs_refresh = False
+
+# Variables para tracking IoT
+if 'iot_envios_ok' not in st.session_state:
+    st.session_state.iot_envios_ok = 0
+if 'iot_envios_error' not in st.session_state:
+    st.session_state.iot_envios_error = 0
+if 'ultimo_envio_thingspeak' not in st.session_state:
+    st.session_state.ultimo_envio_thingspeak = None
+
+# Estado del control del motor por serial
+if 'motor_port' not in st.session_state:
+    st.session_state.motor_port = 'COM3'
+if 'motor_connected' not in st.session_state:
+    st.session_state.motor_connected = False
+if 'motor_mode' not in st.session_state:
+    st.session_state.motor_mode = 'Detenido'
+if 'motor_response' not in st.session_state:
+    st.session_state.motor_response = 'Sin comandos enviados'
+if 'motor_speed' not in st.session_state:
+    st.session_state.motor_speed = 255
+if 'motor_serial' not in st.session_state:
+    st.session_state.motor_serial = None
+if 'servo_angle' not in st.session_state:
+    st.session_state.servo_angle = 95
+
 
 # ============ NOTA: SENSOR NO NECESARIO EN APP.PY ============
 # El sensor solo se usa en monitor_realtime.py
@@ -126,18 +198,506 @@ def save_historical_data():
         path = os.path.join(os.path.dirname(__file__), 'historical_data.json')
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(st.session_state.all_readings, f, indent=2)
-    except:
-        pass
+        logger.info(f"Guardado exitoso en historical_data.json. Total registros: {len(st.session_state.all_readings)}")
+    except Exception as e:
+        logger.error(f"Error guardando datos históricos: {e}")
 
-# ============ CREAR TABS (Solo Análisis, sin Monitoreo Tiempo Real) ============
 
-tab1, tab2, tab3 = st.tabs(["📊 Análisis Histórico", "🏭 Datos Técnicos", "⚙️ Rendimiento vs Vibraciones"])
+def obtener_puertos_serial_disponibles():
+    return [port.device for port in serial.tools.list_ports.comports()]
 
-# Nota: Para Monitoreo en Tiempo Real, ejecutar: streamlit run monitor_realtime.py --server.port 8503
 
-# ========== TAB 1: ANÁLISIS HISTÓRICO ==========
+def puerto_sensor_activo():
+    if sensor and hasattr(sensor, 'serial'):
+        return getattr(sensor.serial, 'port', None)
+    return None
 
-with tab1:
+
+def conectar_motor_serial(puerto):
+    motor_serial = st.session_state.get('motor_serial')
+
+    if not puerto:
+        st.session_state.motor_connected = False
+        st.session_state.motor_response = 'Selecciona un puerto serial válido.'
+        return False, st.session_state.motor_response
+
+    sensor_port = puerto_sensor_activo()
+    if sensor_port and puerto == sensor_port:
+        st.session_state.motor_connected = False
+        st.session_state.motor_response = f'El puerto {puerto} ya está ocupado por el sensor ModBus.'
+        return False, st.session_state.motor_response
+
+    if motor_serial and getattr(motor_serial, 'is_open', False):
+        try:
+            motor_serial.close()
+        except Exception:
+            pass
+
+    try:
+        motor_serial = serial.Serial(puerto, 9600, timeout=1.0, write_timeout=1.0)
+        time.sleep(2.0)
+        motor_serial.reset_input_buffer()
+        motor_serial.reset_output_buffer()
+
+        st.session_state.motor_serial = motor_serial
+        st.session_state.motor_port = puerto
+        st.session_state.motor_connected = True
+        st.session_state.motor_mode = 'Conectado'
+        st.session_state.motor_response = f'Conectado correctamente a {puerto}'
+        return True, st.session_state.motor_response
+    except Exception as e:
+        st.session_state.motor_serial = None
+        st.session_state.motor_connected = False
+        st.session_state.motor_mode = 'Error'
+        st.session_state.motor_response = f'No se pudo abrir {puerto}: {e}'
+        return False, st.session_state.motor_response
+
+
+def desconectar_motor_serial():
+    motor_serial = st.session_state.get('motor_serial')
+    if motor_serial and getattr(motor_serial, 'is_open', False):
+        try:
+            motor_serial.close()
+        except Exception:
+            pass
+
+    st.session_state.motor_serial = None
+    st.session_state.motor_connected = False
+    st.session_state.motor_mode = 'Detenido'
+    st.session_state.motor_response = 'Motor desconectado'
+    return st.session_state.motor_response
+
+
+def enviar_comando_motor(valor, modo):
+    motor_serial = st.session_state.get('motor_serial')
+
+    if not motor_serial or not getattr(motor_serial, 'is_open', False):
+        st.session_state.motor_connected = False
+        st.session_state.motor_response = 'El motor no está conectado.'
+        return False, st.session_state.motor_response
+
+    try:
+        comando = f'M{valor}\n'
+        motor_serial.write(comando.encode('utf-8'))
+        motor_serial.flush()
+        time.sleep(0.08)
+
+        if motor_serial.in_waiting > 0:
+            respuesta = motor_serial.readline().decode('utf-8', errors='ignore').strip()
+        else:
+            respuesta = 'Comando enviado sin respuesta directa'
+
+        st.session_state.motor_speed = abs(int(valor))
+        st.session_state.motor_mode = modo
+        st.session_state.motor_response = respuesta
+        return True, respuesta
+    except Exception as e:
+        st.session_state.motor_connected = False
+        st.session_state.motor_mode = 'Error'
+        st.session_state.motor_response = f'Error enviando comando al motor: {e}'
+        try:
+            motor_serial.close()
+        except Exception:
+            pass
+        st.session_state.motor_serial = None
+        return False, st.session_state.motor_response
+
+
+def enviar_comando_servo(valor):
+    motor_serial = st.session_state.get('motor_serial')
+
+    if not motor_serial or not getattr(motor_serial, 'is_open', False):
+        st.session_state.motor_connected = False
+        st.session_state.motor_response = 'El dispositivo serial no está conectado.'
+        return False, st.session_state.motor_response
+
+    try:
+        # Constreñir en el rango esperado de 10 a 100 grados
+        valor_const = max(10, min(100, int(valor)))
+        comando = f'S{valor_const}\n'
+        motor_serial.write(comando.encode('utf-8'))
+        motor_serial.flush()
+        time.sleep(0.08)
+
+        if motor_serial.in_waiting > 0:
+            respuesta = motor_serial.readline().decode('utf-8', errors='ignore').strip()
+        else:
+            respuesta = 'Comando enviado sin respuesta directa'
+
+        st.session_state.servo_angle = valor_const
+        st.session_state.motor_response = respuesta
+        return True, respuesta
+    except Exception as e:
+        st.session_state.motor_connected = False
+        st.session_state.motor_response = f'Error enviando comando al servo: {e}'
+        try:
+            motor_serial.close()
+        except Exception:
+            pass
+        st.session_state.motor_serial = None
+        return False, st.session_state.motor_response
+
+
+# ============ CONEXIÓN DEL SENSOR MODBUS ============
+@st.cache_resource
+def conectar():
+    logger.info("Intentando conectar con el sensor ModBus WTVB01-485 en COM3...")
+    try:
+        sensor = minimalmodbus.Instrument('COM3', 80)
+        sensor.serial.baudrate = 9600
+        sensor.serial.bytesize = 8
+        sensor.serial.parity = serial.PARITY_NONE
+        sensor.serial.stopbits = 1
+        sensor.serial.timeout = 1.0
+        sensor.mode = minimalmodbus.MODE_RTU
+        sensor.clear_buffers_before_each_transaction = True
+        
+        for intento in range(3):
+            try:
+                _ = sensor.read_register(61, functioncode=3)
+                logger.info(f"✅ Sensor ModBus conectado exitosamente en COM3 (intento {intento + 1})")
+                return sensor
+            except Exception as e:
+                if intento < 2:
+                    logger.warning(f"Intento {intento + 1} de conexión ModBus fallido: {e}. Reintentando...")
+                    time.sleep(0.5)
+                    continue
+                else:
+                    raise e
+        return sensor
+    except Exception as e:
+        logger.error(f"❌ No se pudo conectar al sensor ModBus en COM3: {e}")
+        return None
+
+sensor = conectar()
+
+# ============ MENÚ DE NAVEGACIÓN LATERAL (UNIFICACIÓN) ============
+st.sidebar.title("🧭 Menú Principal")
+opciones_menu = [
+    "⚡ Monitoreo en Tiempo Real",
+    "📊 Análisis Histórico",
+    "🏭 Datos Técnicos y Mantenimiento",
+    "⚙️ Rendimiento vs Vibraciones",
+    "🔧 Control de Motor y Servo",
+    "🪵 Consola de Registros (Logs)"
+]
+
+# Detectar parámetro de consulta en la URL para cambiar de pestaña automáticamente
+menu_index = 0
+try:
+    if 'tab' in st.query_params:
+        tab_param = st.query_params['tab']
+        if tab_param == 'mantenimiento':
+            menu_index = 2
+        elif tab_param == 'control':
+            menu_index = 4
+except Exception as e:
+    logger.error(f"Error leyendo parámetros de consulta: {e}")
+
+page = st.sidebar.radio("Ir a la sección:", opciones_menu, index=menu_index)
+
+
+if page == "⚡ Monitoreo en Tiempo Real":
+    st.subheader("⚡ Monitoreo en Tiempo Real")
+    
+    # Auto-refresh cada 500ms
+    count = st_autorefresh(interval=500, key="realtime_refresh")
+    
+    # Mostrar estado de conexión
+    if sensor:
+        st.success("✅ Sensor WTVB01-485 conectado en COM3")
+    else:
+        st.error("❌ Sensor no disponible - Generando datos de demostración")
+        st.warning("💡 Para usar el sensor real: Cierra otras apps que usen COM3 y reinicia el monitor")
+        
+    st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Norma ISO 20816-3 | Zona A ≤ 0.25 | B ≤ 0.5 | C ≤ 0.75 mm/s")
+    
+    # Leer datos del sensor o generar demostración
+    sensor_ok = False
+    if sensor:
+        try:
+            vx = sensor.read_register(61, functioncode=3, signed=True) / 100.0
+            time.sleep(0.05)
+            vy = sensor.read_register(62, functioncode=3, signed=True) / 100.0
+            time.sleep(0.05)
+            vz = sensor.read_register(63, functioncode=3, signed=True) / 100.0
+            sensor_ok = True
+        except Exception as e:
+            error_msg = str(e)
+            if len(st.session_state.all_readings) % 10 == 0:
+                logger.error(f"Error comunicación sensor: {error_msg[:80]}")
+                st.error(f"⚠️ Error comunicación sensor: {error_msg[:80]}")
+            vx = 0.15 + 0.05 * np.sin(time.time() * 0.5)
+            vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
+            vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
+    else:
+        vx = 0.15 + 0.05 * np.sin(time.time() * 0.5)
+        vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
+        vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
+        
+    st.session_state.buffer_x.append(vx)
+    st.session_state.buffer_y.append(vy)
+    st.session_state.buffer_z.append(vz)
+    
+    rec = {'vx': vx, 'vy': vy, 'vz': vz, 'ts': datetime.utcnow().isoformat() + 'Z'}
+    st.session_state.all_readings.append(rec)
+    
+    vx_rms = calcular_rms(st.session_state.buffer_x)
+    vy_rms = calcular_rms(st.session_state.buffer_y)
+    vz_rms = calcular_rms(st.session_state.buffer_z)
+    vmax = max(vx_rms, vy_rms, vz_rms)
+    zona, color = clasificar_zona(vmax)
+    rpm = calcular_rpm_correlacionado(vmax)
+    
+    # ========== PUBLICAR A IoT ==========
+    if IOT_AVAILABLE:
+        try:
+            if len(st.session_state.all_readings) % 30 == 0:
+                if iot_config.THINGSPEAK_ENABLED:
+                    logger.info(f"Publicando a ThingSpeak: vx={vx:.3f}, vy={vy:.3f}, vz={vz:.3f}, rms={vmax:.3f}")
+                    resultado = iot_handler.enviar_thingspeak(vx, vy, vz, vmax, zona)
+                    if resultado:
+                        st.session_state.iot_envios_ok += 1
+                        st.session_state.ultimo_envio_thingspeak = datetime.now()
+                    else:
+                        st.session_state.iot_envios_error += 1
+            if iot_config.MQTT_ENABLED or iot_config.WEBHOOK_ENABLED:
+                iot_handler.publicar_datos(vx, vy, vz, vmax, zona, rpm)
+            if iot_handler.verificar_alerta(zona, vmax):
+                logger.critical(f"⚠️ Alerta ISO 20816-3 Zona {zona} detectada! Enviando avisos...")
+                iot_handler.enviar_alerta_completa(zona, vmax, vx, vy, vz)
+        except Exception as e:
+            st.session_state.iot_envios_error += 1
+            logger.error(f"Error IoT: {e}")
+            
+    # Guardar cada 50 lecturas
+    if len(st.session_state.all_readings) % 50 == 0:
+        save_historical_data()
+        
+    col1, col2 = st.columns([1, 3])
+    st.session_state.buffer_rpm.append(rpm)
+    
+    col1.markdown(f"### 🚨 ESTADO ISO 20816-3")
+    col1.markdown(f"<div style='background-color:{color};padding:10px;border-radius:5px;text-align:center'>"
+                f"<h2 style='color:white;margin:0'>ZONA {zona}</h2>"
+                f"<p style='color:white;margin:5px 0'>{vmax:.2f} mm/s</p>"
+                f"</div>", unsafe_allow_html=True)
+                
+    col1.metric("⚙️ RPM", f"{rpm:.0f}", "1200 nominal")
+    
+    if zona == "A":
+        col1.success("✅ Funcionamiento Normal")
+    elif zona == "B":
+        col1.warning("⚠️ Vigilancia Recomendada")
+    elif zona == "C":
+        col1.error("🔴 Requiere Corrección")
+    else:
+        col1.error("🚫 INACEPTABLE - Detener Máquina")
+        
+    # ========== CONTROL DE NOTIFICACIONES AUTOMÁTICAS (GMAIL & AZURE) ==========
+    col1.markdown("---")
+    col1.subheader("📧 Notificación Automática")
+    
+    # Cargar email institucional guardado de disco o usar geovanny.basantes@upec.edu.ec por defecto
+    saved_email = ""
+    if IOT_AVAILABLE and iot_handler.config.get('EMAIL_TO'):
+        for em in iot_handler.config.get('EMAIL_TO'):
+            if em not in iot_config.EMAIL_TO:
+                saved_email = em
+                break
+                
+    if 'email_institucional' not in st.session_state:
+        st.session_state.email_institucional = saved_email if saved_email else 'geovanny.basantes@upec.edu.ec'
+        
+    # Campo para ingresar correo institucional de Azure
+    email_institucional = col1.text_input(
+        "Correo Institucional (Azure)",
+        value=st.session_state.email_institucional,
+        key='email_institucional_input'
+    )
+    st.session_state.email_institucional = email_institucional
+
+    if 'email_notifications_enabled' not in st.session_state:
+        st.session_state.email_notifications_enabled = iot_handler.config.get('EMAIL_ENABLED', False) if IOT_AVAILABLE else False
+        
+    # Sincronizar destinatarios y estado actual con el manejador de IoT
+    if IOT_AVAILABLE:
+        destinatarios = list(iot_config.EMAIL_TO)
+        if email_institucional and "@" in email_institucional:
+            if email_institucional not in destinatarios:
+                destinatarios.append(email_institucional)
+                
+        # Guardar en disco si hay diferencias
+        if (iot_handler.config.get('EMAIL_TO') != destinatarios or 
+            iot_handler.config.get('EMAIL_ENABLED') != st.session_state.email_notifications_enabled):
+            iot_handler.config['EMAIL_TO'] = destinatarios
+            iot_handler.config['EMAIL_ENABLED'] = st.session_state.email_notifications_enabled
+            iot_handler.save_email_config()
+        
+    if st.session_state.email_notifications_enabled:
+        btn_label = "🔔 Desactivar Notificación Automática"
+        col1.info("📧 Notificaciones: ACTIVADAS")
+    else:
+        btn_label = "🔕 Activar Notificación Automática"
+        col1.warning("📧 Notificaciones: DESACTIVADAS")
+        
+    if col1.button(btn_label, use_container_width=True, key="gmail_notif_toggle"):
+        if not IOT_AVAILABLE:
+            st.error("El módulo IoT no está disponible.")
+        else:
+            # Invertir el estado
+            nuevo_estado = not st.session_state.email_notifications_enabled
+            st.session_state.email_notifications_enabled = nuevo_estado
+            iot_handler.config['EMAIL_ENABLED'] = nuevo_estado
+            
+            # Asegurar que se sincronizan los destinatarios antes de mandar el correo de prueba
+            destinatarios = list(iot_config.EMAIL_TO)
+            if email_institucional and "@" in email_institucional:
+                if email_institucional not in destinatarios:
+                    destinatarios.append(email_institucional)
+            iot_handler.config['EMAIL_TO'] = destinatarios
+            
+            if nuevo_estado:
+                # Intentar enviar correo de prueba con el estado actual
+                logger.info(f"Usuario activó notificaciones de correo. Enviando email de prueba a {destinatarios}...")
+                with st.spinner("Enviando correo de prueba a Gmail y Azure..."):
+                    asunto = f"📢 [HidroMira] Notificaciones de Estado Activadas"
+                    cuerpo_html = f"""
+                    <html>
+                    <body style='font-family: Arial, sans-serif; background-color: #f4f6f9; padding: 20px;'>
+                        <div style='max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 25px; border-top: 5px solid #10b981; box-shadow: 0 4px 10px rgba(0,0,0,0.1);'>
+                            <h2 style='color: #10b981; text-align: center;'>⚡ Notificaciones HidroMira Activas</h2>
+                            <p>Hola,</p>
+                            <p>Has activado correctamente las notificaciones por correo para el monitoreo de vibraciones de la hidroturbina.</p>
+                            <hr style='border: 0; border-top: 1px solid #e2e8f0; margin: 20px 0;'>
+                            <h3 style='color: #1e293b;'>Estado Actual de la Máquina:</h3>
+                            <table style='width: 100%; border-collapse: collapse; margin-top: 10px;'>
+                                <tr>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: bold;'>Zona ISO 20816-3:</td>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; color: #ef4444; font-weight: bold;'>Zona {zona}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: bold;'>Valor RMS Máximo:</td>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9;'>{vmax:.3f} mm/s</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: bold;'>Eje X:</td>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9;'>{vx:.3f} mm/s</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: bold;'>Eje Y:</td>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9;'>{vy:.3f} mm/s</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: bold;'>Eje Z:</td>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9;'>{vz:.3f} mm/s</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: bold;'>RPM:</td>
+                                    <td style='padding: 8px; border-bottom: 1px solid #f1f5f9;'>{rpm:.0f} RPM</td>
+                                </tr>
+                            </table>
+                            <p style='margin-top: 25px; font-size: 12px; color: #64748b; text-align: center;'>
+                                Sistema HidroMira - Monitoreo Industrial en Tiempo Real
+                            </p>
+                        </div>
+                    </body>
+                    </html>
+                    """
+                    
+                    enviado = iot_handler.enviar_email(asunto, cuerpo_html)
+                    if enviado:
+                        logger.info("Correo de prueba enviado correctamente.")
+                        st.toast("✅ Correo de prueba enviado con éxito.", icon="📧")
+                    else:
+                        logger.error("Fallo al enviar correo de prueba (verificar credenciales de Gmail).")
+                        st.toast("❌ Error al enviar correo. Verifica la clave en iot_config.py.", icon="⚠️")
+                        # Restablecer estado a inactivo si falló el envío de prueba
+                        st.session_state.email_notifications_enabled = False
+                        iot_handler.config['EMAIL_ENABLED'] = False
+            else:
+                logger.info("Usuario desactivó las notificaciones de correo.")
+                st.toast("🔕 Notificaciones desactivadas.", icon="🔌")
+            st.rerun()
+        
+    # Métricas
+    col1.markdown("---")
+    col1.caption("📈 X (Rojo)")
+    col1.metric("Valor", f"{vx:.2f} mm/s")
+    col1.metric("RMS", f"{vx_rms:.2f} mm/s")
+    col1.metric("Amplitud", f"{calcular_amplitud(st.session_state.buffer_x):.2f}")
+    zona_x, _ = clasificar_zona(vx_rms)
+    col1.caption(f"Zona: {zona_x}")
+    
+    col1.markdown("---")
+    col1.caption("📈 Y (Verde)")
+    col1.metric("Valor", f"{vy:.2f} mm/s")
+    col1.metric("RMS", f"{vy_rms:.2f} mm/s")
+    col1.metric("Amplitud", f"{calcular_amplitud(st.session_state.buffer_y):.2f}")
+    zona_y, _ = clasificar_zona(vy_rms)
+    col1.caption(f"Zona: {zona_y}")
+    
+    col1.markdown("---")
+    col1.caption("📈 Z (Azul)")
+    col1.metric("Valor", f"{vz:.2f} mm/s")
+    col1.metric("RMS", f"{vz_rms:.2f} mm/s")
+    col1.metric("Amplitud", f"{calcular_amplitud(st.session_state.buffer_z):.2f}")
+    zona_z, _ = clasificar_zona(vz_rms)
+    col1.caption(f"Zona: {zona_z}")
+    
+    # Gráficas
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(y=list(st.session_state.buffer_x), mode='lines+markers', 
+                            line=dict(color='#ff6b6b', width=2), name='X'))
+    fig.add_trace(go.Scatter(y=list(st.session_state.buffer_y), mode='lines+markers', 
+                            line=dict(color='#51cf66', width=2), name='Y'))
+    fig.add_trace(go.Scatter(y=list(st.session_state.buffer_z), mode='lines+markers', 
+                            line=dict(color='#4dabf7', width=2), name='Z'))
+    fig.update_layout(template="plotly_dark", height=400, yaxis=dict(range=[0, 1.5]))
+    col2.plotly_chart(fig, width='stretch')
+    
+    st.markdown("---")
+    st.subheader("⚙️ Velocidad de Rotación (RPM)")
+    fig_rpm = go.Figure()
+    fig_rpm.add_trace(go.Scatter(y=list(st.session_state.buffer_rpm), mode='lines+markers',
+                                line=dict(color='#ffd700', width=3), name='RPM',
+                                fill='tozeroy'))
+    fig_rpm.add_hline(y=1200, line_dash="dash", line_color="green", annotation_text="RPM Nominal (1200)")
+    fig_rpm.update_layout(template="plotly_dark", height=350, 
+                         yaxis=dict(range=[0, 1300], title="RPM"),
+                         xaxis_title="Tiempo")
+    st.plotly_chart(fig_rpm, width='stretch')
+    
+    st.markdown("---")
+    col1_f, col2_f, col3_f, col4_f = st.columns(4)
+    
+    with col1_f:
+        if sensor_ok:
+            st.success("📡 DATOS REALES DEL SENSOR")
+        else:
+            st.error("⚠️ DATOS DE DEMOSTRACIÓN")
+            st.caption("Sensor no conectado")
+            
+    with col2_f:
+        if IOT_AVAILABLE and iot_config.THINGSPEAK_ENABLED:
+            if st.session_state.ultimo_envio_thingspeak:
+                tiempo_desde = (datetime.now() - st.session_state.ultimo_envio_thingspeak).seconds
+                st.info(f"☁️ ThingSpeak: {tiempo_desde}s")
+            else:
+                st.info("☁️ ThingSpeak: Esperando...")
+        else:
+            st.error("☁️ ThingSpeak: OFF")
+            
+    with col3_f:
+        if IOT_AVAILABLE:
+            st.metric("✅ Envíos OK", st.session_state.iot_envios_ok)
+        else:
+            st.metric("❌ Errores", st.session_state.iot_envios_error)
+            
+    with col4_f:
+        st.caption(f"🔄 {datetime.now().strftime('%H:%M:%S')} | {len(st.session_state.all_readings)} lecturas")
+
+elif page == "📊 Análisis Histórico":
     st.subheader("Análisis Histórico - Diagnóstico ISO 20816-3")
     st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Zona A ≤ 0.25 | Zona B ≤ 0.5 | Zona C ≤ 0.75 | Zona D > 0.75 mm/s")
     
@@ -480,9 +1040,25 @@ with tab1:
         )
         st.plotly_chart(fig_anomalias, width='stretch')
 
+        # ========== IMÁGENES DE REFERENCIA ==========
+        st.markdown("---")
+        st.subheader("🔍 Referencias de la Turbina Francis e ISO 20816-3")
+        
+        col1_img, col2_img = st.columns(2)
+        with col1_img:
+            turbina_img_path = os.path.join(os.path.dirname(__file__), 'hidromira-turbina.png')
+            if os.path.exists(turbina_img_path):
+                st.image(turbina_img_path, caption="Esquema Turbina Francis Hidromira", use_column_width=True)
+                
+        with col2_img:
+            iso_img_path = os.path.join(os.path.dirname(__file__), 'images', 'iso20816.png')
+            if os.path.exists(iso_img_path):
+                st.image(iso_img_path, caption="Límites de Vibración según Norma ISO 20816-3", use_column_width=True)
+                st.markdown("<p style='text-align: center; font-weight: bold; font-size: 15px;'>Hidromira pertenece a Grupo 1: Máquina Grande con Fundación Rígida</p>", unsafe_allow_html=True)
+
 # ========== TAB 2: DATOS TÉCNICOS ==========
 
-with tab2:
+elif page == "🏭 Datos Técnicos y Mantenimiento":
     st.subheader("🏭 Datos Técnicos de la Hidroturbina")
     
     # Mostrar imagen de la turbina
@@ -541,16 +1117,27 @@ with tab2:
     
     # Historial de mantenimiento
     st.subheader("🔧 Historial de Mantenimiento")
+
+    can_edit_maintenance = current_user["role"] in {"admin", "ingeniero_jefe"}
     
-    # Datos de mantenimiento (pueden editarse)
+    # Datos de mantenimiento (cargados de base de datos JSON persistente)
     if 'maintenance_log' not in st.session_state:
-        st.session_state.maintenance_log = [
-            {"fecha": "2024-12-15", "tipo": "Preventivo", "descripcion": "Limpieza general y lubricación", "técnico": "Carlos Rodríguez"},
-            {"fecha": "2024-11-20", "tipo": "Correctivo", "descripcion": "Reemplazo de sello de eje", "técnico": "Juan Pérez"},
-            {"fecha": "2024-10-10", "tipo": "Preventivo", "descripcion": "Inspección de álabes", "técnico": "María González"},
-            {"fecha": "2024-09-05", "tipo": "Correctivo", "descripcion": "Ajuste de cojinetes", "técnico": "Carlos Rodríguez"},
-            {"fecha": "2024-08-12", "tipo": "Preventivo", "descripcion": "Cambio de aceite del generador", "técnico": "Roberto Sánchez"},
-        ]
+        maintenance_path = os.path.join(os.path.dirname(__file__), 'maintenance_log.json')
+        if os.path.exists(maintenance_path):
+            try:
+                with open(maintenance_path, 'r', encoding='utf-8') as f:
+                    st.session_state.maintenance_log = json.load(f)
+            except Exception as e:
+                logger.error(f"Error al leer maintenance_log.json: {e}")
+                st.session_state.maintenance_log = []
+        else:
+            st.session_state.maintenance_log = [
+                {"fecha": "2024-12-15", "tipo": "Preventivo", "descripcion": "Limpieza general y lubricación", "técnico": "Carlos Rodríguez"},
+                {"fecha": "2024-11-20", "tipo": "Correctivo", "descripcion": "Reemplazo de sello de eje", "técnico": "Juan Pérez"},
+                {"fecha": "2024-10-10", "tipo": "Preventivo", "descripcion": "Inspección de álabes", "técnico": "María González"},
+                {"fecha": "2024-09-05", "tipo": "Correctivo", "descripcion": "Ajuste de cojinetes", "técnico": "Carlos Rodríguez"},
+                {"fecha": "2024-08-12", "tipo": "Preventivo", "descripcion": "Cambio de aceite del generador", "técnico": "Roberto Sánchez"},
+            ]
     
     # Mostrar historial en tabla
     col1, col2 = st.columns([3, 1])
@@ -562,11 +1149,19 @@ with tab2:
                 st.write(f"**Técnico:** {mantenimiento['técnico']}")
     
     with col2:
-        if st.button("➕ Nuevo Registro"):
-            st.session_state.show_new_maintenance = True
+        if can_edit_maintenance:
+            if st.button("➕ Nuevo Registro"):
+                st.session_state.show_new_maintenance = True
+        else:
+            st.info("Solo admin e ingeniero en jefe pueden registrar mantenimiento.")
     
     # Formulario para nuevo mantenimiento
     if st.session_state.get('show_new_maintenance', False):
+        require_role(
+            current_user,
+            {"admin", "ingeniero_jefe"},
+            message="Solo admin o ingeniero en jefe pueden registrar mantenimiento.",
+        )
         st.markdown("---")
         st.subheader("📝 Registrar Nuevo Mantenimiento")
         
@@ -587,6 +1182,14 @@ with tab2:
                 "técnico": new_tecnico
             }
             st.session_state.maintenance_log.insert(0, nuevo_registro)
+            # Guardar en base de datos JSON
+            try:
+                maintenance_path = os.path.join(os.path.dirname(__file__), 'maintenance_log.json')
+                with open(maintenance_path, 'w', encoding='utf-8') as f:
+                    json.dump(st.session_state.maintenance_log, f, indent=2, ensure_ascii=False)
+                logger.info(f"Nuevo registro de mantenimiento guardado y persistido: [{new_tipo}] por {new_tecnico}. Descripción: {new_descripcion}")
+            except Exception as e:
+                logger.error(f"Error persistiendo maintenance_log.json: {e}")
             st.success("✅ Registro guardado exitosamente")
             st.session_state.show_new_maintenance = False
             st.rerun()
@@ -606,7 +1209,7 @@ with tab2:
 
 # ========== TAB 3: RENDIMIENTO VS VIBRACIONES ==========
 
-with tab3:
+elif page == "⚙️ Rendimiento vs Vibraciones":
     st.subheader("⚙️ Análisis de Rendimiento vs Vibraciones")
     st.caption("Relación entre niveles de vibración (ISO 20816-3) y rendimiento de la turbina")
     
@@ -826,3 +1429,205 @@ with tab3:
                 st.plotly_chart(fig_historico, width='stretch')
     else:
         st.info("⏳ Esperando datos del sensor para calcular rendimiento...")
+
+elif page == "🔧 Control de Motor y Servo":
+    st.subheader("🔧 Control de Motor y Servo")
+    st.caption("Panel serial para el motor L298N y Servomotor. Usa un puerto distinto al sensor ModBus si ambos dispositivos están conectados.")
+
+    sensor_port = puerto_sensor_activo()
+    if sensor_port:
+        st.info(f"Sensor ModBus activo en {sensor_port}. Evita usar ese mismo puerto para el Arduino.")
+
+    puertos_disponibles = obtener_puertos_serial_disponibles()
+    if not puertos_disponibles:
+        puertos_disponibles = [st.session_state.motor_port]
+
+    if st.session_state.motor_port not in puertos_disponibles:
+        puertos_disponibles = [st.session_state.motor_port] + puertos_disponibles
+
+    try:
+        indice_motor = puertos_disponibles.index(st.session_state.motor_port)
+    except ValueError:
+        indice_motor = 0
+
+    col_config, col_estado = st.columns([2, 1])
+
+    with col_config:
+        puerto_seleccionado = st.selectbox(
+            "Puerto serial de Arduino",
+            puertos_disponibles,
+            index=indice_motor,
+            key="motor_port_selector",
+        )
+
+        col_conectar, col_desconectar = st.columns(2)
+        with col_conectar:
+            if st.button("🔌 Conectar Arduino", use_container_width=True):
+                ok, mensaje = conectar_motor_serial(puerto_seleccionado)
+                if ok:
+                    st.success(mensaje)
+                else:
+                    st.error(mensaje)
+
+        with col_desconectar:
+            if st.button("⛔ Desconectar Arduino", use_container_width=True):
+                st.info(desconectar_motor_serial())
+
+        st.markdown("---")
+
+        # Tabs para organizar controles de Motor y Servo
+        tab_motor, tab_servo = st.tabs(["⚡ Control del Motor", "📐 Control del Servo"])
+
+        with tab_motor:
+            st.write("**Acciones rápidas de dirección**")
+            col_fwd, col_stop, col_rev = st.columns(3)
+            with col_fwd:
+                if st.button("⬆️ Adelante", use_container_width=True):
+                    ok, mensaje = enviar_comando_motor(abs(int(st.session_state.motor_speed)), "Adelante")
+                    if ok:
+                        st.success(f"Motor adelante: {mensaje}")
+                    else:
+                        st.error(mensaje)
+
+            with col_stop:
+                if st.button("⏹️ Detener", use_container_width=True):
+                    ok, mensaje = enviar_comando_motor(0, "Detenido")
+                    if ok:
+                        st.info(f"Motor detenido: {mensaje}")
+                    else:
+                        st.error(mensaje)
+
+            with col_rev:
+                if st.button("⬇️ Reversa", use_container_width=True):
+                    ok, mensaje = enviar_comando_motor(-abs(int(st.session_state.motor_speed)), "Reversa")
+                    if ok:
+                        st.warning(f"Motor en reversa: {mensaje}")
+                    else:
+                        st.error(mensaje)
+
+            st.markdown("---")
+            velocidad = st.slider(
+                "Velocidad PWM (Potencia)",
+                min_value=0,
+                max_value=255,
+                value=int(st.session_state.motor_speed),
+                step=5,
+            )
+            st.session_state.motor_speed = velocidad
+
+            col_aplicar_fwd, col_aplicar_rev = st.columns(2)
+            with col_aplicar_fwd:
+                if st.button("Aplicar adelante", use_container_width=True):
+                    ok, mensaje = enviar_comando_motor(abs(int(velocidad)), "Adelante")
+                    if ok:
+                        st.success(mensaje)
+                    else:
+                        st.error(mensaje)
+
+            with col_aplicar_rev:
+                if st.button("Aplicar reversa", use_container_width=True):
+                    ok, mensaje = enviar_comando_motor(-abs(int(velocidad)), "Reversa")
+                    if ok:
+                        st.warning(mensaje)
+                    else:
+                        st.error(mensaje)
+
+        with tab_servo:
+            st.write("**Posiciones predefinidas (Rangos de tu código)**")
+            col_min, col_init, col_max = st.columns(3)
+            with col_min:
+                if st.button("⏮️ Mínimo (10°)", use_container_width=True):
+                    ok, mensaje = enviar_comando_servo(10)
+                    if ok:
+                        st.info(f"Servo a 10°: {mensaje}")
+                    else:
+                        st.error(mensaje)
+
+            with col_init:
+                if st.button("🔄 Inicial (95°)", use_container_width=True):
+                    ok, mensaje = enviar_comando_servo(95)
+                    if ok:
+                        st.success(f"Servo a 95°: {mensaje}")
+                    else:
+                        st.error(mensaje)
+
+            with col_max:
+                if st.button("⏭️ Máximo (100°)", use_container_width=True):
+                    ok, mensaje = enviar_comando_servo(100)
+                    if ok:
+                        st.warning(f"Servo a 100°: {mensaje}")
+                    else:
+                        st.error(mensaje)
+
+            st.markdown("---")
+            servo_val = st.slider(
+                "Ángulo del Servomotor",
+                min_value=10,
+                max_value=100,
+                value=int(st.session_state.servo_angle),
+                step=1,
+            )
+
+            if st.button("Aplicar ángulo", use_container_width=True):
+                ok, mensaje = enviar_comando_servo(servo_val)
+                if ok:
+                    st.success(mensaje)
+                else:
+                    st.error(mensaje)
+
+    with col_estado:
+        st.subheader("📊 Estado")
+        st.metric("Conexión", "Activa" if st.session_state.motor_connected else "Inactiva")
+        st.metric("Modo Motor", st.session_state.motor_mode)
+        st.metric("Velocidad Motor", f"{st.session_state.motor_speed}")
+        st.metric("Ángulo Servo", f"{st.session_state.servo_angle}°")
+        st.caption(f"Puerto actual: {st.session_state.motor_port}")
+        st.caption(f"Respuesta serial: {st.session_state.motor_response}")
+
+    st.markdown("---")
+    st.info(
+        "Este panel envía comandos seriales con el formato M255 (motor adelante), M-255 (motor reversa), M0 (motor detener), "
+        "y S10 a S100 (servo de 10° a 100°). Asegúrate de cargar el sketch compatible en tu Arduino."
+    )
+
+elif page == "🪵 Consola de Registros (Logs)":
+    st.subheader("🪵 Consola de Registros de Operación (Logs)")
+    st.caption("Lectura en tiempo real del archivo local `hidromira.log`.")
+    
+    if st.button("🔄 Refrescar Logs", use_container_width=True):
+        st.rerun()
+        
+    log_path = "hidromira.log"
+    if os.path.exists(log_path):
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                log_lines = f.readlines()
+            
+            # Mostrar los últimos 150 registros
+            show_lines = log_lines[-150:]
+            
+            log_text = ""
+            for line in reversed(show_lines):
+                if "[ERROR]" in line or "[CRITICAL]" in line:
+                    log_text += f"🔴 {line}"
+                elif "[WARNING]" in line:
+                    log_text += f"🟡 {line}"
+                elif "[INFO]" in line:
+                    log_text += f"🟢 {line}"
+                else:
+                    log_text += f"⚪ {line}"
+                    
+            st.text_area("Eventos del Sistema", log_text, height=500)
+            
+            st.markdown("---")
+            if st.button("🗑️ Limpiar Archivo de Logs", use_container_width=True):
+                with open(log_path, "w", encoding="utf-8") as f:
+                    f.write("")
+                logger.info("Archivo de logs limpiado manualmente por el usuario.")
+                st.success("Archivo de logs vaciado.")
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"Error leyendo archivo de logs: {e}")
+    else:
+        st.info("Aún no se ha generado ningún registro de logs.")
