@@ -1,0 +1,19 @@
+[project]
+name = "nueva-carpeta"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "minimalmodbus",
+    "pyserial",
+    "streamlit",
+    "streamlit-autorefresh",
+    "plotly",
+    "numpy",
+    "flask",
+    "flask-cors",
+    "paho-mqtt",
+    "requests",
+    "psycopg2-binary"
+]
