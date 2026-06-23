@@ -44,3 +44,38 @@ NGROK_URL = "https://3f33-190-15-129-108.ngrok-free.app/"
 API_ENABLED = True
 API_PORT = 5000
 API_HOST = "0.0.0.0"  # 0.0.0.0 para acceso externo
+
+# ========== CONFIGURACIÓN DE PUERTOS SERIALES ==========
+SENSOR_PORT_DEFAULT = 'COM8'
+MOTOR_PORT_DEFAULT = 'COM3'
+
+def load_serial_config():
+    import os
+    import json
+    path = os.path.join(os.path.dirname(__file__), 'serial_config.json')
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                return {
+                    'sensor_port': config.get('sensor_port', SENSOR_PORT_DEFAULT),
+                    'motor_port': config.get('motor_port', MOTOR_PORT_DEFAULT)
+                }
+        except Exception:
+            pass
+    return {'sensor_port': SENSOR_PORT_DEFAULT, 'motor_port': MOTOR_PORT_DEFAULT}
+
+def save_serial_config(sensor_port, motor_port):
+    import os
+    import json
+    path = os.path.join(os.path.dirname(__file__), 'serial_config.json')
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'sensor_port': sensor_port,
+                'motor_port': motor_port
+            }, f, indent=2)
+        return True
+    except Exception:
+        return False
+

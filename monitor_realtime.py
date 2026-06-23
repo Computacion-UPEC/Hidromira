@@ -83,13 +83,22 @@ if 'iot_envios_error' not in st.session_state:
 if 'ultimo_envio_thingspeak' not in st.session_state:
     st.session_state.ultimo_envio_thingspeak = None
 
+# Cargar configuración centralizada de puertos COM
+if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_serial_config'):
+    puertos_cfg = iot_config.load_serial_config()
+else:
+    puertos_cfg = {'sensor_port': 'COM8', 'motor_port': 'COM3'}
+
+if 'sensor_port' not in st.session_state:
+    st.session_state.sensor_port = puertos_cfg['sensor_port']
+
 # ============ CONEXIÓN SENSOR ============
 
 @st.cache_resource
-def conectar():
-    logger.info("[RT] Intentando conectar con el sensor ModBus WTVB01-485 en COM8...")
+def conectar(puerto):
+    logger.info(f"[RT] Intentando conectar con el sensor ModBus WTVB01-485 en {puerto}...")
     try:
-        sensor = minimalmodbus.Instrument('COM8', 80)
+        sensor = minimalmodbus.Instrument(puerto, 80)
         sensor.serial.baudrate = 9600
         sensor.serial.bytesize = 8
         sensor.serial.parity = serial.PARITY_NONE
@@ -102,7 +111,7 @@ def conectar():
         for intento in range(3):
             try:
                 _ = sensor.read_register(61, functioncode=3)
-                logger.info(f"[RT] ✅ Sensor ModBus conectado exitosamente en COM8 (intento {intento + 1})")
+                logger.info(f"[RT] ✅ Sensor ModBus conectado exitosamente en {puerto} (intento {intento + 1})")
                 return sensor
             except Exception as e:
                 if intento < 2:
@@ -113,17 +122,17 @@ def conectar():
                     raise e
         return sensor
     except Exception as e:
-        logger.error(f"[RT] ❌ No se pudo conectar al sensor ModBus en COM8: {e}")
+        logger.error(f"[RT] ❌ No se pudo conectar al sensor ModBus en {puerto}: {e}")
         return None
 
-sensor = conectar()
+sensor = conectar(st.session_state.sensor_port)
 
 # Mostrar estado de conexión
 if sensor:
-    st.success("✅ Sensor WTVB01-485 conectado en COM8")
+    st.success(f"✅ Sensor WTVB01-485 conectado en {st.session_state.sensor_port}")
 else:
     st.error("❌ Sensor no disponible - Generando datos de demostración")
-    st.warning("💡 Para usar el sensor real: Cierra otras apps que usen COM8 y reinicia el monitor")
+    st.warning(f"💡 Para usar el sensor real: Cierra otras apps que usen {st.session_state.sensor_port} y reinicia el monitor")
 
 st.caption("")
 

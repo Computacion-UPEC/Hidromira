@@ -92,7 +92,6 @@ if 'last_tab1_refresh' not in st.session_state:
 
 if 'tab1_needs_refresh' not in st.session_state:
     st.session_state.tab1_needs_refresh = False
-
 # Variables para tracking IoT
 if 'iot_envios_ok' not in st.session_state:
     st.session_state.iot_envios_ok = 0
@@ -101,9 +100,18 @@ if 'iot_envios_error' not in st.session_state:
 if 'ultimo_envio_thingspeak' not in st.session_state:
     st.session_state.ultimo_envio_thingspeak = None
 
+# Cargar configuración centralizada de puertos COM
+if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_serial_config'):
+    puertos_cfg = iot_config.load_serial_config()
+else:
+    puertos_cfg = {'sensor_port': 'COM8', 'motor_port': 'COM3'}
+
+if 'sensor_port' not in st.session_state:
+    st.session_state.sensor_port = puertos_cfg['sensor_port']
+
 # Estado del control del motor por serial
 if 'motor_port' not in st.session_state:
-    st.session_state.motor_port = 'COM3'
+    st.session_state.motor_port = puertos_cfg['motor_port']
 if 'motor_connected' not in st.session_state:
     st.session_state.motor_connected = False
 if 'motor_mode' not in st.session_state:
@@ -117,8 +125,6 @@ if 'motor_serial' not in st.session_state:
 if 'servo_angle' not in st.session_state:
     st.session_state.servo_angle = 95
 
-
-# ============ NOTA: SENSOR NO NECESARIO EN APP.PY ============
 # El sensor solo se usa en monitor_realtime.py
 # Esta app solo lee historical_data.json para análisis
 
@@ -340,10 +346,10 @@ def enviar_comando_servo(valor):
 
 # ============ CONEXIÓN DEL SENSOR MODBUS ============
 @st.cache_resource
-def conectar():
-    logger.info("Intentando conectar con el sensor ModBus WTVB01-485 en COM8...")
+def conectar(puerto):
+    logger.info(f"Intentando conectar con el sensor ModBus WTVB01-485 en {puerto}...")
     try:
-        sensor = minimalmodbus.Instrument('COM8', 80)
+        sensor = minimalmodbus.Instrument(puerto, 80)
         sensor.serial.baudrate = 9600
         sensor.serial.bytesize = 8
         sensor.serial.parity = serial.PARITY_NONE
@@ -355,7 +361,7 @@ def conectar():
         for intento in range(3):
             try:
                 _ = sensor.read_register(61, functioncode=3)
-                logger.info(f"✅ Sensor ModBus conectado exitosamente en COM8 (intento {intento + 1})")
+                logger.info(f"✅ Sensor ModBus conectado exitosamente en {puerto} (intento {intento + 1})")
                 return sensor
             except Exception as e:
                 if intento < 2:
@@ -366,10 +372,10 @@ def conectar():
                     raise e
         return sensor
     except Exception as e:
-        logger.error(f"❌ No se pudo conectar al sensor ModBus en COM8: {e}")
+        logger.error(f"❌ No se pudo conectar al sensor ModBus en {puerto}: {e}")
         return None
 
-sensor = conectar()
+sensor = conectar(st.session_state.sensor_port)
 
 # ============ MENÚ DE NAVEGACIÓN LATERAL (UNIFICACIÓN) ============
 st.sidebar.title("🧭 Menú Principal")
@@ -405,10 +411,10 @@ if page == "⚡ Monitoreo en Tiempo Real":
     
     # Mostrar estado de conexión
     if sensor:
-        st.success("✅ Sensor WTVB01-485 conectado en COM8")
+        st.success(f"✅ Sensor WTVB01-485 conectado en {st.session_state.sensor_port}")
     else:
         st.error("❌ Sensor no disponible - Generando datos de demostración")
-        st.warning("💡 Para usar el sensor real: Cierra otras apps que usen COM8 y reinicia el monitor")
+        st.warning(f"💡 Para usar el sensor real: Cierra otras apps que usen {st.session_state.sensor_port} y reinicia el monitor")
         
     st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Norma ISO 20816-3 | Zona A ≤ 0.25 | B ≤ 0.5 | C ≤ 0.75 mm/s")
     
@@ -1434,31 +1440,61 @@ elif page == "🔧 Control de Motor y Servo":
     st.subheader("🔧 Control de Motor y Servo")
     st.caption("Panel serial para el motor L298N y Servomotor. Usa un puerto distinto al sensor ModBus si ambos dispositivos están conectados.")
 
-    sensor_port = puerto_sensor_activo()
-    if sensor_port:
-        st.info(f"Sensor ModBus activo en {sensor_port}. Evita usar ese mismo puerto para el Arduino.")
+    # Obtener puertos disponibles del sistema
+    puertos_sistema = obtener_puertos_serial_disponibles()
 
-    puertos_disponibles = obtener_puertos_serial_disponibles()
-    if not puertos_disponibles:
-        puertos_disponibles = [st.session_state.motor_port]
-
-    if st.session_state.motor_port not in puertos_disponibles:
-        puertos_disponibles = [st.session_state.motor_port] + puertos_disponibles
-
+    # Preparamos los puertos para el Sensor
+    puertos_sensor = list(puertos_sistema)
+    if st.session_state.sensor_port not in puertos_sensor:
+        puertos_sensor = [st.session_state.sensor_port] + puertos_sensor
     try:
-        indice_motor = puertos_disponibles.index(st.session_state.motor_port)
+        indice_sensor = puertos_sensor.index(st.session_state.sensor_port)
+    except ValueError:
+        indice_sensor = 0
+
+    # Preparamos los puertos para el Motor/Arduino
+    puertos_motor = list(puertos_sistema)
+    if not puertos_motor:
+        puertos_motor = [st.session_state.motor_port]
+    if st.session_state.motor_port not in puertos_motor:
+        puertos_motor = [st.session_state.motor_port] + puertos_motor
+    try:
+        indice_motor = puertos_motor.index(st.session_state.motor_port)
     except ValueError:
         indice_motor = 0
 
     col_config, col_estado = st.columns([2, 1])
 
     with col_config:
+        st.write("### ⚙️ Configuración de Puertos")
+        
+        # --- SECTOR SENSOR ---
+        puerto_sensor_sel = st.selectbox(
+            "Puerto serial del Sensor ModBus",
+            puertos_sensor,
+            index=indice_sensor,
+            key="sensor_port_selector"
+        )
+        
+        if puerto_sensor_sel != st.session_state.sensor_port:
+            st.session_state.sensor_port = puerto_sensor_sel
+            if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_serial_config'):
+                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port)
+            st.toast(f"Puerto del sensor actualizado a {puerto_sensor_sel}. Reconectando...", icon="📡")
+            st.rerun()
+            
+        # --- SECTOR ARDUINO/MOTOR ---
         puerto_seleccionado = st.selectbox(
-            "Puerto serial de Arduino",
-            puertos_disponibles,
+            "Puerto serial de Arduino (Motor/Servo)",
+            puertos_motor,
             index=indice_motor,
             key="motor_port_selector",
         )
+        
+        if puerto_seleccionado != st.session_state.motor_port:
+            st.session_state.motor_port = puerto_seleccionado
+            if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_serial_config'):
+                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port)
 
         col_conectar, col_desconectar = st.columns(2)
         with col_conectar:
