@@ -25,6 +25,7 @@ logging.basicConfig(
 logger = logging.getLogger("HidroMiraApp")
 
 from auth import get_role_label, require_login, render_user_panel, require_role
+import db
 
 # Importar módulos IoT
 try:
@@ -128,6 +129,30 @@ if 'servo_angle' not in st.session_state:
 # El sensor solo se usa en monitor_realtime.py
 # Esta app solo lee historical_data.json para análisis
 
+def verificar_respaldo_automatico():
+    import time
+    import threading
+    
+    status_path = os.path.join(os.path.dirname(__file__), 'backup_status.json')
+    last_backup = 0
+    
+    if os.path.exists(status_path):
+        try:
+            with open(status_path, 'r', encoding='utf-8') as f:
+                status = json.load(f)
+                dt = datetime.fromisoformat(status.get('ultimo_respaldo', ''))
+                last_backup = dt.timestamp()
+        except Exception:
+            pass
+            
+    ahora = time.time()
+    # Ejecutar respaldo automático diario (86400 segundos)
+    if ahora - last_backup > 86400:
+        logger.info("Iniciando respaldo automático diario de datos...")
+        threading.Thread(target=db.ejecutar_respaldo, args=('Automático Diario',), daemon=True).start()
+
+verificar_respaldo_automatico()
+
 # ============ FUNCIONES DE CÁLCULO ============
 
 def calcular_amplitud(buffer):
@@ -199,12 +224,10 @@ def detectar_anomalias(buffer, threshold_factor=2.0):
     return anomalias
 
 def save_historical_data():
-    """Guardar datos históricos en archivo JSON"""
+    """Guardar datos históricos usando el módulo db"""
     try:
-        path = os.path.join(os.path.dirname(__file__), 'historical_data.json')
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(st.session_state.all_readings, f, indent=2)
-        logger.info(f"Guardado exitoso en historical_data.json. Total registros: {len(st.session_state.all_readings)}")
+        db.save_historical_data(st.session_state.all_readings)
+        logger.info(f"Guardado exitoso del histórico. Total registros: {len(st.session_state.all_readings)}")
     except Exception as e:
         logger.error(f"Error guardando datos históricos: {e}")
 
@@ -709,13 +732,10 @@ elif page == "📊 Análisis Histórico":
     
     # Cargar JSON solo UNA VEZ cuando Tab 1 se activa
     if not st.session_state.json_loaded:
-        historical_path = os.path.join(os.path.dirname(__file__), 'historical_data.json')
-        if os.path.exists(historical_path):
-            try:
-                with open(historical_path, 'r', encoding='utf-8') as f:
-                    st.session_state.all_readings = json.load(f)
-            except:
-                pass
+        try:
+            st.session_state.all_readings = db.load_historical_data()
+        except Exception as e:
+            logger.error(f"Error cargando histórico de base de datos: {e}")
         st.session_state.json_loaded = True
     
     # Selector de período
@@ -1128,15 +1148,13 @@ elif page == "🏭 Datos Técnicos y Mantenimiento":
     
     # Datos de mantenimiento (cargados de base de datos JSON persistente)
     if 'maintenance_log' not in st.session_state:
-        maintenance_path = os.path.join(os.path.dirname(__file__), 'maintenance_log.json')
-        if os.path.exists(maintenance_path):
-            try:
-                with open(maintenance_path, 'r', encoding='utf-8') as f:
-                    st.session_state.maintenance_log = json.load(f)
-            except Exception as e:
-                logger.error(f"Error al leer maintenance_log.json: {e}")
-                st.session_state.maintenance_log = []
-        else:
+        try:
+            st.session_state.maintenance_log = db.load_maintenance_log()
+        except Exception as e:
+            logger.error(f"Error al leer maintenance log: {e}")
+            st.session_state.maintenance_log = []
+            
+        if not st.session_state.maintenance_log:
             st.session_state.maintenance_log = [
                 {"fecha": "2024-12-15", "tipo": "Preventivo", "descripcion": "Limpieza general y lubricación", "técnico": "Carlos Rodríguez"},
                 {"fecha": "2024-11-20", "tipo": "Correctivo", "descripcion": "Reemplazo de sello de eje", "técnico": "Juan Pérez"},
@@ -1188,14 +1206,12 @@ elif page == "🏭 Datos Técnicos y Mantenimiento":
                 "técnico": new_tecnico
             }
             st.session_state.maintenance_log.insert(0, nuevo_registro)
-            # Guardar en base de datos JSON
+            # Guardar en base de datos
             try:
-                maintenance_path = os.path.join(os.path.dirname(__file__), 'maintenance_log.json')
-                with open(maintenance_path, 'w', encoding='utf-8') as f:
-                    json.dump(st.session_state.maintenance_log, f, indent=2, ensure_ascii=False)
+                db.save_maintenance_log(st.session_state.maintenance_log)
                 logger.info(f"Nuevo registro de mantenimiento guardado y persistido: [{new_tipo}] por {new_tecnico}. Descripción: {new_descripcion}")
             except Exception as e:
-                logger.error(f"Error persistiendo maintenance_log.json: {e}")
+                logger.error(f"Error al guardar registro de mantenimiento: {e}")
             st.success("✅ Registro guardado exitosamente")
             st.session_state.show_new_maintenance = False
             st.rerun()
@@ -1212,6 +1228,32 @@ elif page == "🏭 Datos Técnicos y Mantenimiento":
     | 2026-04-10 | Correctivo | Reemplazo de rodamientos (si es necesario) |
     | 2026-06-01 | Preventivo | Revisión de sistema de regulación |
     """)
+
+    st.markdown("---")
+    st.subheader("💾 Copias de Seguridad y Respaldos")
+    st.write("Genera una copia de seguridad instantánea de la base de datos y los archivos del sistema.")
+    
+    col_back, col_info = st.columns([1, 2])
+    with col_back:
+        if st.button("🚀 Crear Respaldo Ahora", use_container_width=True):
+            ok, msg = db.ejecutar_respaldo('Manual')
+            if ok:
+                st.success(msg)
+            else:
+                st.error(msg)
+                
+    with col_info:
+        # Cargar último respaldo si existe
+        status_path = os.path.join(os.path.dirname(__file__), 'backup_status.json')
+        if os.path.exists(status_path):
+            try:
+                with open(status_path, 'r', encoding='utf-8') as f:
+                    status = json.load(f)
+                st.info(f"📅 Último respaldo: {status.get('ultimo_respaldo', 'Nunca')} ({status.get('tipo', '')})")
+            except:
+                st.info("No se han detectado respaldos previos.")
+        else:
+            st.info("No se han detectado respaldos previos.")
 
 # ========== TAB 3: RENDIMIENTO VS VIBRACIONES ==========
 

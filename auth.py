@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import secrets
+import db
 
 import streamlit as st
 
@@ -20,18 +21,21 @@ DEFAULT_USERS = [
         "username": "tecnico1",
         "display_name": "Técnico de Planta",
         "role": "tecnico",
+        "email": "ggeta13basantes@gmail.com",
         "password": "Tecnico123!",
     },
     {
         "username": "admin",
         "display_name": "Administrador",
         "role": "admin",
+        "email": "ggeta13basantes@gmail.com",
         "password": "Admin123!",
     },
     {
         "username": "jefe",
         "display_name": "Ingeniero en Jefe",
         "role": "ingeniero_jefe",
+        "email": "geovanny.basantesq@gmail.com",
         "password": "Jefe123!",
     },
 ]
@@ -58,6 +62,7 @@ def _serialize_user(user):
         "username": user["username"],
         "display_name": user["display_name"],
         "role": _normalize_role(user["role"]),
+        "email": user.get("email", "").strip(),
         "salt": salt,
         "password_hash": _hash_password(user["password"], salt),
         "active": True,
@@ -78,29 +83,7 @@ def ensure_user_store():
 
 def load_users():
     ensure_user_store()
-
-    with open(USER_STORE_FILE, "r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    if isinstance(data, list):
-        users = data
-    else:
-        users = data.get("users", [])
-
-    normalized_users = []
-    for user in users:
-        normalized_users.append(
-            {
-                "username": user.get("username", "").strip(),
-                "display_name": user.get("display_name", user.get("name", "Usuario")).strip(),
-                "role": _normalize_role(user.get("role", "tecnico")),
-                "salt": user.get("salt", ""),
-                "password_hash": user.get("password_hash", ""),
-                "active": bool(user.get("active", True)),
-            }
-        )
-
-    return normalized_users
+    return db.load_users()
 
 
 def get_role_label(role):
@@ -137,23 +120,137 @@ def logout():
     st.session_state.auth_user = None
 
 
+import random
+import string
+
+def recuperar_password(username, email):
+    username = username.strip().lower()
+    email = email.strip().lower()
+
+    # Importar iot_config en caliente para evitar problemas de importación circular
+    try:
+        import iot_config
+        IOT_CONFIG_AVAILABLE = True
+    except ImportError:
+        iot_config = None
+        IOT_CONFIG_AVAILABLE = False
+
+    users = load_users()
+    user_found = None
+    for u in users:
+        if u["username"].lower() == username and u["email"].lower() == email:
+            user_found = u
+            break
+
+    if not user_found:
+        return False, "Usuario o correo electrónico no coinciden."
+
+    # Generar contraseña temporal
+    caracteres = string.ascii_letters + string.digits + "!@#$"
+    temp_pass = ''.join(random.choice(caracteres) for _ in range(8))
+
+    # Hashear y actualizar
+    salt = secrets.token_hex(16)
+    user_found["salt"] = salt
+    user_found["password_hash"] = _hash_password(temp_pass, salt)
+
+    try:
+        db.save_users(users)
+    except Exception as e:
+        return False, f"Error al actualizar la base de datos: {e}"
+
+    # Enviar correo electrónico
+    if not IOT_CONFIG_AVAILABLE or not getattr(iot_config, 'EMAIL_ENABLED', False):
+        return True, f"🔑 (Modo pruebas/sin SMTP) Tu contraseña temporal es: **{temp_pass}**"
+
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        msg = MIMEMultipart()
+        msg['From'] = iot_config.EMAIL_FROM
+        msg['To'] = email
+        msg['Subject'] = "🔑 [HidroMira] Recuperación de Contraseña"
+
+        cuerpo_html = f"""
+        <html>
+        <body style='font-family: Arial, sans-serif; background-color: #f4f6f9; padding: 20px;'>
+            <div style='max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 25px; border-top: 5px solid #2563eb;'>
+                <h2 style='color: #2563eb;'>Recuperación de Contraseña - HidroMira</h2>
+                <p>Hola <strong>{user_found['display_name']}</strong>,</p>
+                <p>Se ha solicitado la restauración de tu contraseña para el panel HidroMira.</p>
+                <p>Tu contraseña temporal de acceso es:</p>
+                <div style='background-color: #f3f4f6; padding: 15px; border-radius: 5px; text-align: center; font-size: 20px; font-weight: bold; letter-spacing: 1px; color: #1e293b; margin: 20px 0;'>
+                    {temp_pass}
+                </div>
+                <p style='color: #ef4444; font-weight: bold;'>Por favor, inicia sesión y cambia esta contraseña lo antes posible por seguridad.</p>
+                <hr style='border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;'>
+                <p style='font-size: 12px; color: #6b7280; text-align: center;'>Sistema HidroMira - Control de Turbina</p>
+            </div>
+        </body>
+        </html>
+        """
+        msg.attach(MIMEText(cuerpo_html, 'html'))
+
+        server = smtplib.SMTP(iot_config.EMAIL_SMTP_SERVER, iot_config.EMAIL_SMTP_PORT)
+        server.starttls()
+        server.login(iot_config.EMAIL_FROM, iot_config.EMAIL_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        return True, "Se ha enviado una contraseña temporal a su correo electrónico."
+    except Exception as e:
+        return True, f"⚠️ Error de envío SMTP ({e}). Contraseña temporal: **{temp_pass}**"
+
+
 def login_form(app_name="HidroMira"):
     st.markdown(f"## {app_name}")
-    st.write("Ingresa con tu usuario y contraseña para continuar.")
 
-    with st.form("auth_login_form"):
-        username = st.text_input("Usuario")
-        password = st.text_input("Contraseña", type="password")
-        submitted = st.form_submit_button("Ingresar")
+    if "recovery_mode" not in st.session_state:
+        st.session_state.recovery_mode = False
 
-    if submitted:
-        user = authenticate(username, password)
-        if user:
-            st.session_state.auth_user = user
+    if st.session_state.recovery_mode:
+        st.subheader("🔑 Recuperar Contraseña")
+        st.write("Ingresa tu usuario y el correo registrado para recibir una contraseña temporal.")
+        
+        with st.form("auth_recovery_form"):
+            rec_username = st.text_input("Usuario")
+            rec_email = st.text_input("Correo electrónico")
+            submitted_rec = st.form_submit_button("Enviar contraseña temporal")
+            
+        if submitted_rec:
+            if rec_username and rec_email:
+                ok, msg = recuperar_password(rec_username, rec_email)
+                if ok:
+                    st.success(msg)
+                else:
+                    st.error(msg)
+            else:
+                st.warning("Por favor, completa todos los campos.")
+                
+        if st.button("Volver al Inicio de Sesión", use_container_width=True):
+            st.session_state.recovery_mode = False
             st.rerun()
-        st.error("Credenciales inválidas o usuario inactivo.")
+    else:
+        st.write("Ingresa con tu usuario y contraseña para continuar.")
 
-    st.caption("La contraseña se almacena con hash local en users.json.")
+        with st.form("auth_login_form"):
+            username = st.text_input("Usuario")
+            password = st.text_input("Contraseña", type="password")
+            submitted = st.form_submit_button("Ingresar")
+
+        if submitted:
+            user = authenticate(username, password)
+            if user:
+                st.session_state.auth_user = user
+                st.rerun()
+            st.error("Credenciales inválidas o usuario inactivo.")
+
+        if st.button("¿Olvidaste tu contraseña?", use_container_width=True):
+            st.session_state.recovery_mode = True
+            st.rerun()
+
+        st.caption("La contraseña se almacena con hash local en users.json.")
 
 
 def require_login(app_name="HidroMira"):

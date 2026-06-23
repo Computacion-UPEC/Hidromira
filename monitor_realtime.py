@@ -23,6 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger("HidroMiraRealtime")
 
 from auth import get_role_label, require_login, render_user_panel
+import db
 
 # Importar módulos IoT
 try:
@@ -249,15 +250,13 @@ if IOT_AVAILABLE:
         logger.error(f"[RT] Error IoT: {e}")
         st.session_state.iot_envios_error += 1
 
-# Guardar cada 50 lecturas
+# Guardar cada 50 lecturas usando el módulo db
 if len(st.session_state.all_readings) % 50 == 0:
     try:
-        path = os.path.join(os.path.dirname(__file__), 'historical_data.json')
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(st.session_state.all_readings, f, indent=2)
+        db.save_historical_data(st.session_state.all_readings)
         logger.info(f"[RT] Histórico guardado automáticamente. Total registros: {len(st.session_state.all_readings)}")
     except Exception as e:
-        logger.error(f"[RT] Error al guardar histórico en historical_data.json: {e}")
+        logger.error(f"[RT] Error al guardar histórico: {e}")
 
 col1, col2 = st.columns([1, 3])
 

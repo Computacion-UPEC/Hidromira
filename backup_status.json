@@ -1,0 +1,11 @@
+{
+  "ultimo_respaldo": "2026-06-23T18:06:13.600076",
+  "tipo": "Test Manual Script",
+  "archivos_respaldados": [
+    "users.json",
+    "historical_data.json",
+    "maintenance_log.json",
+    "email_config.json"
+  ],
+  "postgresql_respaldado": false
+}

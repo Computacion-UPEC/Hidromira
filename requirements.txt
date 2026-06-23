@@ -8,3 +8,5 @@ flask
 flask-cors
 paho-mqtt
 requests
+psycopg2-binary
+

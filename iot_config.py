@@ -79,3 +79,12 @@ def save_serial_config(sensor_port, motor_port):
     except Exception:
         return False
 
+
+# ========== CONFIGURACIÓN DE POSTGRESQL ==========
+DB_ENABLED = False  # Cambiar a True para habilitar PostgreSQL
+DB_HOST = "localhost"
+DB_PORT = 5432
+DB_NAME = "hidromira"
+DB_USER = "postgres"
+DB_PASSWORD = "tu_password_aqui"
+
