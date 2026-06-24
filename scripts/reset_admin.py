@@ -50,11 +50,23 @@ def main():
                 break
                 
         if encontrado:
+            db_updated = False
+            try:
+                sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                import db
+                if db.DB_ENABLED:
+                    db.save_users(data["users"])
+                    db_updated = True
+            except Exception as e:
+                print(f"Aviso: No se pudo actualizar en PostgreSQL: {e}")
+
             with open(USER_STORE_FILE, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=2, ensure_ascii=False)
-            print(f"\n✅ ¡Contraseña del usuario 'admin' actualizada exitosamente!")
+            print(f"\nExito: Contraseña del usuario 'admin' actualizada exitosamente!")
             print(f"   Usuario: admin")
             print(f"   Contraseña: {nueva_clave}")
+            if db_updated:
+                print("   (Tambien se sincronizo correctamente en PostgreSQL)")
         else:
             print("❌ No se encontró el usuario 'admin' en el archivo users.json.")
             
