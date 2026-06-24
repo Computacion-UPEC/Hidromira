@@ -682,7 +682,14 @@ if page == "⚡ Monitoreo en Tiempo Real":
                             line=dict(color='#51cf66', width=2), name='Y'))
     fig.add_trace(go.Scatter(y=list(st.session_state.buffer_z), mode='lines+markers', 
                             line=dict(color='#4dabf7', width=2), name='Z'))
-    fig.update_layout(template="plotly_dark", height=400, yaxis=dict(range=[0, 1.5]))
+    # Escala Y dinámica con un mínimo de 3.0 para evitar oscilaciones de escala en reposo
+    max_y = max(
+        max(list(st.session_state.buffer_x)) if st.session_state.buffer_x else 0,
+        max(list(st.session_state.buffer_y)) if st.session_state.buffer_y else 0,
+        max(list(st.session_state.buffer_z)) if st.session_state.buffer_z else 0,
+        3.0
+    )
+    fig.update_layout(template="plotly_dark", height=400, yaxis=dict(range=[0, max_y * 1.15], title="Velocidad (mm/s)"))
     col2.plotly_chart(fig, width='stretch')
     
     st.markdown("---")
@@ -868,7 +875,9 @@ elif page == "📊 Análisis Histórico":
                 fill='tozeroy',
                 name='X - Horizontal'
             ))
-            fig_x.update_layout(template="plotly_dark", height=350, yaxis=dict(range=[0, 1.5]),
+            max_x = max(vx_vals) if vx_vals else 0
+            fig_x.update_layout(template="plotly_dark", height=350, 
+                              yaxis=dict(range=[0, max(max_x, 3.0) * 1.15], title="Velocidad (mm/s)"),
                               title="Velocidad X (Horizontal)", xaxis_title="Tiempo")
             st.plotly_chart(fig_x, width='stretch')
         
@@ -883,7 +892,9 @@ elif page == "📊 Análisis Histórico":
                 fill='tozeroy',
                 name='Y - Vertical'
             ))
-            fig_y.update_layout(template="plotly_dark", height=350, yaxis=dict(range=[0, 1.5]),
+            max_y = max(vy_vals) if vy_vals else 0
+            fig_y.update_layout(template="plotly_dark", height=350, 
+                              yaxis=dict(range=[0, max(max_y, 3.0) * 1.15], title="Velocidad (mm/s)"),
                               title="Velocidad Y (Vertical)", xaxis_title="Tiempo")
             st.plotly_chart(fig_y, width='stretch')
         
@@ -898,7 +909,9 @@ elif page == "📊 Análisis Histórico":
                 fill='tozeroy',
                 name='Z - Axial'
             ))
-            fig_z.update_layout(template="plotly_dark", height=350, yaxis=dict(range=[0, 1.5]),
+            max_z = max(vz_vals) if vz_vals else 0
+            fig_z.update_layout(template="plotly_dark", height=350, 
+                              yaxis=dict(range=[0, max(max_z, 3.0) * 1.15], title="Velocidad (mm/s)"),
                               title="Velocidad Z (Axial)", xaxis_title="Tiempo")
             st.plotly_chart(fig_z, width='stretch')
     else:
@@ -941,9 +954,10 @@ elif page == "📊 Análisis Histórico":
             fig_iso_x.add_trace(go.Scatter(y=rms_x, mode='lines', name='RMS X',
                                           line=dict(color='#ff6b6b', width=3)))
             
+            max_rms_x = max(rms_x) if rms_x else 0
             fig_iso_x.update_layout(
                 template="plotly_dark", height=400, 
-                yaxis=dict(range=[0, 1.5], title="RMS (mm/s)"),
+                yaxis=dict(range=[0, max(max_rms_x, 3.0) * 1.15], title="RMS (mm/s)"),
                 title="Eje X - Diagrama ISO 20816-3",
                 hovermode='x unified'
             )
@@ -969,9 +983,10 @@ elif page == "📊 Análisis Histórico":
             fig_iso_y.add_trace(go.Scatter(y=rms_y, mode='lines', name='RMS Y',
                                           line=dict(color='#51cf66', width=3)))
             
+            max_rms_y = max(rms_y) if rms_y else 0
             fig_iso_y.update_layout(
                 template="plotly_dark", height=400,
-                yaxis=dict(range=[0, 1.5], title="RMS (mm/s)"),
+                yaxis=dict(range=[0, max(max_rms_y, 3.0) * 1.15], title="RMS (mm/s)"),
                 title="Eje Y - Diagrama ISO 20816-3",
                 hovermode='x unified'
             )
@@ -998,9 +1013,10 @@ elif page == "📊 Análisis Histórico":
             fig_iso_z.add_trace(go.Scatter(y=rms_z, mode='lines', name='RMS Z',
                                           line=dict(color='#4dabf7', width=3)))
             
+            max_rms_z = max(rms_z) if rms_z else 0
             fig_iso_z.update_layout(
                 template="plotly_dark", height=400,
-                yaxis=dict(range=[0, 1.5], title="RMS (mm/s)"),
+                yaxis=dict(range=[0, max(max_rms_z, 3.0) * 1.15], title="RMS (mm/s)"),
                 title="Eje Z - Diagrama ISO 20816-3",
                 hovermode='x unified'
             )
@@ -1058,10 +1074,16 @@ elif page == "📊 Análisis Histórico":
                                      marker=dict(size=15, color='darkred', symbol='diamond'),
                                      name='Anomalía Y', showlegend=False)
         
+        max_anom = max(
+            max(vx_vals) if vx_vals else 0,
+            max(vy_vals) if vy_vals else 0,
+            max(vz_vals) if vz_vals else 0,
+            3.0
+        )
         fig_anomalias.update_layout(
             template="plotly_dark", height=350,
             title="Detección de Anomalías Periódicas",
-            yaxis=dict(range=[0, 1.5], title="Velocidad (mm/s)"),
+            yaxis=dict(range=[0, max_anom * 1.15], title="Velocidad (mm/s)"),
             hovermode='x unified'
         )
         st.plotly_chart(fig_anomalias, width='stretch')

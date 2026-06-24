@@ -313,7 +313,14 @@ fig.add_trace(go.Scatter(y=list(st.session_state.buffer_y), mode='lines+markers'
                         line=dict(color='#51cf66', width=2), name='Y'))
 fig.add_trace(go.Scatter(y=list(st.session_state.buffer_z), mode='lines+markers', 
                         line=dict(color='#4dabf7', width=2), name='Z'))
-fig.update_layout(template="plotly_dark", height=400, yaxis=dict(range=[0, 1.5]))
+# Escala Y dinámica con un mínimo de 3.0 para evitar oscilaciones de escala en reposo
+max_y = max(
+    max(list(st.session_state.buffer_x)) if st.session_state.buffer_x else 0,
+    max(list(st.session_state.buffer_y)) if st.session_state.buffer_y else 0,
+    max(list(st.session_state.buffer_z)) if st.session_state.buffer_z else 0,
+    3.0
+)
+fig.update_layout(template="plotly_dark", height=400, yaxis=dict(range=[0, max_y * 1.15], title="Velocidad (mm/s)"))
 col2.plotly_chart(fig, width='stretch')
 
 st.markdown("---")
