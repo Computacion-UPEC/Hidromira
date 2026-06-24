@@ -63,9 +63,9 @@ if sensor:
     while True:
         try:
             # Leemos registros de velocidad X, Y, Z
-            vx = sensor.read_register(61, functioncode=3, signed=True) / 100.0  # 0x3d = 61
-            vy = sensor.read_register(62, functioncode=3, signed=True) / 100.0  # 0x3e = 62
-            vz = sensor.read_register(63, functioncode=3, signed=True) / 100.0  # 0x3f = 63
+            vx = sensor.read_register(58, functioncode=3, signed=True) / 100.0  # 0x3a = 58
+            vy = sensor.read_register(59, functioncode=3, signed=True) / 100.0  # 0x3b = 59
+            vz = sensor.read_register(60, functioncode=3, signed=True) / 100.0  # 0x3c = 60
             
             st.session_state.buffer_x.append(vx)
             st.session_state.buffer_y.append(vy)

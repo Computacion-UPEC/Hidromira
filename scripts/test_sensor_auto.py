@@ -12,7 +12,7 @@ print("="*70)
 # Configuraciones a probar
 direcciones = [1, 80, 50]  # Direcciones ModBus comunes
 baudrates = [9600, 19200, 115200]  # Baudrates comunes en WitMotion
-registros = [61, 0, 1]  # Registros a probar (61=0x3D, 0=primer registro, 1=segundo)
+registros = [58, 0, 1]  # Registros a probar (58=0x3A, 0=primer registro, 1=segundo)
 funciones = [3, 4]  # Función 3 = Holding Registers, Función 4 = Input Registers
 
 configuraciones_probadas = 0
@@ -40,8 +40,8 @@ for direccion in direcciones:
                 sensor.mode = minimalmodbus.MODE_RTU
                 sensor.clear_buffers_before_each_transaction = True
                 
-                # Intentar leer primer registro (61 = Vx en sensor configurado)
-                valor = sensor.read_register(61, functioncode=funcion, signed=True)
+                # Intentar leer primer registro (58 = Vx en sensor configurado)
+                valor = sensor.read_register(58, functioncode=funcion, signed=True)
                 
                 # Si llegamos aquí, ¡funcionó!
                 print("✅ ¡ÉXITO!")
@@ -59,16 +59,16 @@ for direccion in direcciones:
                 print(f"   Dirección ModBus: {direccion}")
                 print(f"   Baudrate: {baudrate}")
                 print(f"   Función ModBus: {funcion}")
-                print(f"   Registro 61 (Vx): {valor} raw → {valor/100.0:.3f} mm/s")
+                print(f"   Registro 58 (Vx): {valor} raw → {valor/100.0:.3f} mm/s")
                 
                 # Probar leer los 3 ejes
                 print(f"\n📊 Leyendo todos los ejes...")
                 try:
-                    vx = sensor.read_register(61, functioncode=funcion, signed=True) / 100.0
+                    vx = sensor.read_register(58, functioncode=funcion, signed=True) / 100.0
                     time.sleep(0.05)
-                    vy = sensor.read_register(62, functioncode=funcion, signed=True) / 100.0
+                    vy = sensor.read_register(59, functioncode=funcion, signed=True) / 100.0
                     time.sleep(0.05)
-                    vz = sensor.read_register(63, functioncode=funcion, signed=True) / 100.0
+                    vz = sensor.read_register(60, functioncode=funcion, signed=True) / 100.0
                     
                     print(f"   Vx: {vx:.3f} mm/s")
                     print(f"   Vy: {vy:.3f} mm/s")
@@ -112,9 +112,9 @@ if configuracion_exitosa:
     print(f"   sensor = minimalmodbus.Instrument('COM8', {configuracion_exitosa['direccion']})")
     print(f"   sensor.serial.baudrate = {configuracion_exitosa['baudrate']}")
     print(f"\nCambia líneas de lectura (~125-130):")
-    print(f"   vx = sensor.read_register(61, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
-    print(f"   vy = sensor.read_register(62, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
-    print(f"   vz = sensor.read_register(63, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
+    print(f"   vx = sensor.read_register(58, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
+    print(f"   vy = sensor.read_register(59, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
+    print(f"   vz = sensor.read_register(60, functioncode={configuracion_exitosa['funcion']}, signed=True) / 100.0")
     
 else:
     print("❌ NINGUNA CONFIGURACIÓN FUNCIONÓ")

@@ -79,7 +79,7 @@ app.py (lee JSON + análisis histórico)
 ## 🔧 Configuración
 
 - **Sensor**: COM3, 9600 baud, address 80 (0x50)
-- **Registros ModBus**: 0x3d (Vx), 0x3e (Vy), 0x3f (Vz)
+- **Registros ModBus**: 0x3a (Vx), 0x3b (Vy), 0x3c (Vz)
 - **Norma**: ISO 20816-3 Grupo 1
   - Zona A: ≤ 0.25 mm/s
   - Zona B: ≤ 0.5 mm/s

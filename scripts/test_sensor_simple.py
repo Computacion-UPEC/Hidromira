@@ -12,7 +12,7 @@ print("\n📋 Configuración:")
 print("   Puerto: COM8")
 print("   Dirección ModBus: 80 (0x50)")
 print("   Baudrate: 9600")
-print("   Registros: 0x3D (Vx), 0x3E (Vy), 0x3F (Vz)")
+print("   Registros: 0x3A (Vx), 0x3B (Vy), 0x3C (Vz)")
 print("\n🔌 Conectando al sensor...")
 
 try:
@@ -30,22 +30,22 @@ try:
     print("\n📊 Intentando leer registros...")
     
     # Intentar leer registro de prueba
-    print("   - Probando registro 0x3D (61 decimal - Vx)...")
-    vx_raw = sensor.read_register(61, functioncode=3, signed=True)
+    print("   - Probando registro 0x3A (58 decimal - Vx)...")
+    vx_raw = sensor.read_register(58, functioncode=3, signed=True)
     vx = vx_raw / 100.0
     print(f"   ✅ Vx raw: {vx_raw} → {vx:.3f} mm/s")
     
     time.sleep(0.1)
     
-    print("   - Probando registro 0x3E (62 decimal - Vy)...")
-    vy_raw = sensor.read_register(62, functioncode=3, signed=True)
+    print("   - Probando registro 0x3B (59 decimal - Vy)...")
+    vy_raw = sensor.read_register(59, functioncode=3, signed=True)
     vy = vy_raw / 100.0
     print(f"   ✅ Vy raw: {vy_raw} → {vy:.3f} mm/s")
     
     time.sleep(0.1)
     
-    print("   - Probando registro 0x3F (63 decimal - Vz)...")
-    vz_raw = sensor.read_register(63, functioncode=3, signed=True)
+    print("   - Probando registro 0x3C (60 decimal - Vz)...")
+    vz_raw = sensor.read_register(60, functioncode=3, signed=True)
     vz = vz_raw / 100.0
     print(f"   ✅ Vz raw: {vz_raw} → {vz:.3f} mm/s")
     

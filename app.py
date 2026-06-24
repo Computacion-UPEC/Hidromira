@@ -383,7 +383,7 @@ def conectar(puerto):
         
         for intento in range(3):
             try:
-                _ = sensor.read_register(61, functioncode=3)
+                _ = sensor.read_register(58, functioncode=3)
                 logger.info(f"✅ Sensor ModBus conectado exitosamente en {puerto} (intento {intento + 1})")
                 return sensor
             except Exception as e:
@@ -445,11 +445,11 @@ if page == "⚡ Monitoreo en Tiempo Real":
     sensor_ok = False
     if sensor:
         try:
-            vx = sensor.read_register(61, functioncode=3, signed=True) / 100.0
+            vx = sensor.read_register(58, functioncode=3, signed=True) / 100.0
             time.sleep(0.05)
-            vy = sensor.read_register(62, functioncode=3, signed=True) / 100.0
+            vy = sensor.read_register(59, functioncode=3, signed=True) / 100.0
             time.sleep(0.05)
-            vz = sensor.read_register(63, functioncode=3, signed=True) / 100.0
+            vz = sensor.read_register(60, functioncode=3, signed=True) / 100.0
             sensor_ok = True
         except Exception as e:
             error_msg = str(e)

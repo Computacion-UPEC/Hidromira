@@ -9928,3 +9928,4 @@ tornado.websocket.WebSocketClosedError
 2026-06-16 09:22:49,465 [INFO] [HidroMiraIoT] 📧 Iniciando envío de correo asíncrono a: ['ggeta13basantes@gmail.com', 'geovanny.basantesq@gmail.com', 'geovanny.basantes@upec.edu.ec', 'stalin.jimenez@upec.edu.ec ', 'milton.delhierro@upec.edu.ec']...
 2026-06-16 09:22:49,601 [INFO] [HidroMiraIoT] 🖼️ Imagen inline adjuntada: C:\Users\ggeta\Documents\Nueva carpeta\images\iso20816.png
 2026-06-16 09:22:54,227 [INFO] [HidroMiraIoT] ✅ Correo enviado con éxito a ['ggeta13basantes@gmail.com', 'geovanny.basantesq@gmail.com', 'geovanny.basantes@upec.edu.ec', 'stalin.jimenez@upec.edu.ec ', 'milton.delhierro@upec.edu.ec']!
+2026-06-23 18:14:55,346 [INFO] [HidroMiraIoT] 📧 Configuración de correo cargada de disco: {'EMAIL_TO': ['ggeta13basantes@gmail.com', 'geovanny.basantesq@gmail.com', 'geovanny.basantes@upec.edu.ec']}

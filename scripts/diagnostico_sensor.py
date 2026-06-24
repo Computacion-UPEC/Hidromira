@@ -43,21 +43,21 @@ for idx, config in enumerate(configuraciones, 1):
         sensor.clear_buffers_before_each_transaction = True
         
         # Intentar leer registros
-        print(f"   Intentando leer registro 0x3D (61)...")
-        vx = sensor.read_register(61, functioncode=3, signed=True)
-        print(f"   ✅ Registro 61: {vx} (raw) = {vx/100.0:.3f} mm/s")
+        print(f"   Intentando leer registro 0x3A (58)...")
+        vx = sensor.read_register(58, functioncode=3, signed=True)
+        print(f"   ✅ Registro 58: {vx} (raw) = {vx/100.0:.3f} mm/s")
         
         time.sleep(0.1)
         
-        print(f"   Intentando leer registro 0x3E (62)...")
-        vy = sensor.read_register(62, functioncode=3, signed=True)
-        print(f"   ✅ Registro 62: {vy} (raw) = {vy/100.0:.3f} mm/s")
+        print(f"   Intentando leer registro 0x3B (59)...")
+        vy = sensor.read_register(59, functioncode=3, signed=True)
+        print(f"   ✅ Registro 59: {vy} (raw) = {vy/100.0:.3f} mm/s")
         
         time.sleep(0.1)
         
-        print(f"   Intentando leer registro 0x3F (63)...")
-        vz = sensor.read_register(63, functioncode=3, signed=True)
-        print(f"   ✅ Registro 63: {vz} (raw) = {vz/100.0:.3f} mm/s")
+        print(f"   Intentando leer registro 0x3C (60)...")
+        vz = sensor.read_register(60, functioncode=3, signed=True)
+        print(f"   ✅ Registro 60: {vz} (raw) = {vz/100.0:.3f} mm/s")
         
         print(f"\n   🎉 ¡CONFIGURACIÓN CORRECTA ENCONTRADA!")
         print(f"   Puerto: {config['puerto']}")
@@ -102,7 +102,7 @@ print("5. Si nada funciona, intenta con software WitMotion oficial")
 print("\n📚 Documentación WTVB01-485:")
 print("   - Dirección por defecto: 0x50 (80)")
 print("   - Baudrate por defecto: 9600")
-print("   - Registros: 0x3D (Vx), 0x3E (Vy), 0x3F (Vz)")
+print("   - Registros: 0x3A (Vx), 0x3B (Vy), 0x3C (Vz)")
 print("   - Valores en centésimas (dividir por 100)")
 
 print("\n" + "=" * 70)

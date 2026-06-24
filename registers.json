@@ -1,7 +1,7 @@
 {
-  "Velocity X": {"addr": 61, "scale": 100.0, "signed": true, "unit": "mm/s"},
-  "Velocity Y": {"addr": 62, "scale": 100.0, "signed": true, "unit": "mm/s"},
-  "Velocity Z": {"addr": 63, "scale": 100.0, "signed": true, "unit": "mm/s"},
+  "Velocity X": {"addr": 58, "scale": 100.0, "signed": true, "unit": "mm/s"},
+  "Velocity Y": {"addr": 59, "scale": 100.0, "signed": true, "unit": "mm/s"},
+  "Velocity Z": {"addr": 60, "scale": 100.0, "signed": true, "unit": "mm/s"},
   "Acceleration X": {"addr": null, "scale": 100.0, "signed": true, "unit": "g"},
   "Acceleration Y": {"addr": null, "scale": 100.0, "signed": true, "unit": "g"},
   "Acceleration Z": {"addr": null, "scale": 100.0, "signed": true, "unit": "g"},
