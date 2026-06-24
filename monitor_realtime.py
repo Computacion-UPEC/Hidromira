@@ -91,7 +91,9 @@ else:
     puertos_cfg = {'sensor_port': 'COM8', 'motor_port': 'COM3'}
 
 if 'sensor_port' not in st.session_state:
-    st.session_state.sensor_port = puertos_cfg['sensor_port']
+    st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
+if 'sensor_scale' not in st.session_state:
+    st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
 
 # ============ CONEXIÓN SENSOR ============
 
@@ -176,11 +178,11 @@ sensor_ok = False
 if sensor:
     try:
         # Leer con delay entre registros para evitar problemas de comunicación
-        vx = sensor.read_register(58, functioncode=3, signed=True) / 100.0
+        vx = sensor.read_register(58, functioncode=3, signed=True) / st.session_state.sensor_scale
         time.sleep(0.05)  # Pequeño delay entre lecturas
-        vy = sensor.read_register(59, functioncode=3, signed=True) / 100.0
+        vy = sensor.read_register(59, functioncode=3, signed=True) / st.session_state.sensor_scale
         time.sleep(0.05)
-        vz = sensor.read_register(60, functioncode=3, signed=True) / 100.0
+        vz = sensor.read_register(60, functioncode=3, signed=True) / st.session_state.sensor_scale
         sensor_ok = True
     except Exception as e:
         error_msg = str(e)

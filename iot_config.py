@@ -48,6 +48,7 @@ API_HOST = "0.0.0.0"  # 0.0.0.0 para acceso externo
 # ========== CONFIGURACIÓN DE PUERTOS SERIALES ==========
 SENSOR_PORT_DEFAULT = 'COM8'
 MOTOR_PORT_DEFAULT = 'COM3'
+SENSOR_SCALE_DEFAULT = 100.0
 
 def load_serial_config():
     import os
@@ -59,13 +60,18 @@ def load_serial_config():
                 config = json.load(f)
                 return {
                     'sensor_port': config.get('sensor_port', SENSOR_PORT_DEFAULT),
-                    'motor_port': config.get('motor_port', MOTOR_PORT_DEFAULT)
+                    'motor_port': config.get('motor_port', MOTOR_PORT_DEFAULT),
+                    'sensor_scale': config.get('sensor_scale', SENSOR_SCALE_DEFAULT)
                 }
         except Exception:
             pass
-    return {'sensor_port': SENSOR_PORT_DEFAULT, 'motor_port': MOTOR_PORT_DEFAULT}
+    return {
+        'sensor_port': SENSOR_PORT_DEFAULT, 
+        'motor_port': MOTOR_PORT_DEFAULT,
+        'sensor_scale': SENSOR_SCALE_DEFAULT
+    }
 
-def save_serial_config(sensor_port, motor_port):
+def save_serial_config(sensor_port, motor_port, sensor_scale=SENSOR_SCALE_DEFAULT):
     import os
     import json
     path = os.path.join(os.path.dirname(__file__), 'serial_config.json')
@@ -73,7 +79,8 @@ def save_serial_config(sensor_port, motor_port):
         with open(path, 'w', encoding='utf-8') as f:
             json.dump({
                 'sensor_port': sensor_port,
-                'motor_port': motor_port
+                'motor_port': motor_port,
+                'sensor_scale': float(sensor_scale)
             }, f, indent=2)
         return True
     except Exception:

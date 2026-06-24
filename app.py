@@ -108,7 +108,9 @@ else:
     puertos_cfg = {'sensor_port': 'COM8', 'motor_port': 'COM3'}
 
 if 'sensor_port' not in st.session_state:
-    st.session_state.sensor_port = puertos_cfg['sensor_port']
+    st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
+if 'sensor_scale' not in st.session_state:
+    st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
 
 # Estado del control del motor por serial
 if 'motor_port' not in st.session_state:
@@ -445,11 +447,11 @@ if page == "⚡ Monitoreo en Tiempo Real":
     sensor_ok = False
     if sensor:
         try:
-            vx = sensor.read_register(58, functioncode=3, signed=True) / 100.0
+            vx = sensor.read_register(58, functioncode=3, signed=True) / st.session_state.sensor_scale
             time.sleep(0.05)
-            vy = sensor.read_register(59, functioncode=3, signed=True) / 100.0
+            vy = sensor.read_register(59, functioncode=3, signed=True) / st.session_state.sensor_scale
             time.sleep(0.05)
-            vz = sensor.read_register(60, functioncode=3, signed=True) / 100.0
+            vz = sensor.read_register(60, functioncode=3, signed=True) / st.session_state.sensor_scale
             sensor_ok = True
         except Exception as e:
             error_msg = str(e)
@@ -1543,8 +1545,24 @@ elif page == "🔧 Control de Motor y Servo":
         if puerto_sensor_sel != st.session_state.sensor_port:
             st.session_state.sensor_port = puerto_sensor_sel
             if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_serial_config'):
-                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port)
+                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port, st.session_state.sensor_scale)
             st.toast(f"Puerto del sensor actualizado a {puerto_sensor_sel}. Reconectando...", icon="📡")
+            st.rerun()
+            
+        # --- SECTOR ESCALA SENSOR ---
+        escala_sensor_sel = st.selectbox(
+            "Divisor de Escala del Sensor ModBus (Ajuste de Lectura)",
+            [1.0, 10.0, 100.0],
+            index=[1.0, 10.0, 100.0].index(st.session_state.sensor_scale) if st.session_state.sensor_scale in [1.0, 10.0, 100.0] else 2,
+            key="sensor_scale_selector",
+            help="1.0 = lectura directa (mm/s crudos). 10.0 = dividir para precisión decimal de décimas. 100.0 = dividir para precisión de centésimas."
+        )
+        
+        if escala_sensor_sel != st.session_state.sensor_scale:
+            st.session_state.sensor_scale = escala_sensor_sel
+            if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_serial_config'):
+                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port, st.session_state.sensor_scale)
+            st.toast(f"Divisor de escala actualizado a {escala_sensor_sel}.", icon="📏")
             st.rerun()
             
         # --- SECTOR ARDUINO/MOTOR ---
@@ -1558,7 +1576,7 @@ elif page == "🔧 Control de Motor y Servo":
         if puerto_seleccionado != st.session_state.motor_port:
             st.session_state.motor_port = puerto_seleccionado
             if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_serial_config'):
-                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port)
+                iot_config.save_serial_config(st.session_state.sensor_port, st.session_state.motor_port, st.session_state.sensor_scale)
 
         col_conectar, col_desconectar = st.columns(2)
         with col_conectar:
