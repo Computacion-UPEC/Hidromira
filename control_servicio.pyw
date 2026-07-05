@@ -6,6 +6,7 @@ import sys
 import os
 import webbrowser
 import time
+import threading
 
 # Nombre del servicio por defecto
 DEFAULT_SERVICES = ["HidromiraService", "Monitor Streamlit", "API REST", "Hidromira"]
@@ -236,10 +237,17 @@ class ServiceControlApp:
             self.btn_stop.config(state="normal", bg=self.accent_red)
 
     def start_service(self):
-        service_name = self.service_var.get().strip()
+        self.btn_start.config(state="disabled")
+        self.btn_stop.config(state="disabled")
         self.lbl_status.config(text="INICIANDO...", fg=self.accent_blue)
+        self.lbl_info.config(text="Solicitando inicio de servicio...", fg=self.accent_blue)
         self.root.update_idletasks()
         
+        # Lanzar la operación en un hilo separado para que no se congele la ventana
+        threading.Thread(target=self._start_service_thread, daemon=True).start()
+
+    def _start_service_thread(self):
+        service_name = self.service_var.get().strip()
         try:
             # Ejecutar inicio de servicio
             res = subprocess.run(
@@ -250,24 +258,32 @@ class ServiceControlApp:
             )
             if res.returncode == 0 or "already running" in res.stderr:
                 self.lbl_info.config(text=f"Servicio '{service_name}' iniciado correctamente.", fg=self.accent_green)
-                # Abrir el navegador si está seleccionado
+                # Abrir el navegador si está seleccionado en un subproceso
                 if self.open_browser_var.get():
-                    self.lbl_status.config(text="ABRIENDO WEB...", fg=self.accent_blue)
-                    self.root.update_idletasks()
-                    time.sleep(1.0)
-                    webbrowser.open("http://localhost:8501/")
+                    time.sleep(2.0)
+                    try:
+                        webbrowser.open("http://localhost:8501/")
+                    except Exception:
+                        pass
             else:
                 self.lbl_info.config(text=f"Detalle: {res.stderr.strip()}", fg=self.accent_red)
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo iniciar el servicio:\n{str(e)}")
+            self.lbl_info.config(text=f"Error: {str(e)}", fg=self.accent_red)
             
-        self.update_status()
+        self.root.after(0, self.update_status)
 
     def stop_service(self):
-        service_name = self.service_var.get().strip()
+        self.btn_start.config(state="disabled")
+        self.btn_stop.config(state="disabled")
         self.lbl_status.config(text="DETENIENDO...", fg=self.accent_blue)
+        self.lbl_info.config(text="Solicitando detención de servicio...", fg=self.accent_blue)
         self.root.update_idletasks()
         
+        # Lanzar la operación en un hilo separado
+        threading.Thread(target=self._stop_service_thread, daemon=True).start()
+
+    def _stop_service_thread(self):
+        service_name = self.service_var.get().strip()
         try:
             # Ejecutar detención de servicio
             res = subprocess.run(
@@ -284,9 +300,9 @@ class ServiceControlApp:
             else:
                 self.lbl_info.config(text=f"Detalle: {res.stderr.strip()}", fg=self.accent_red)
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo detener el servicio:\n{str(e)}")
+            self.lbl_info.config(text=f"Error: {str(e)}", fg=self.accent_red)
             
-        self.update_status()
+        self.root.after(0, self.update_status)
 
     def launch_witmotion(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
