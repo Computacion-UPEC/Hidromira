@@ -6,7 +6,7 @@ import sys
 import os
 
 # Nombre del servicio por defecto
-DEFAULT_SERVICES = ["Monitor Streamlit", "API REST", "Hidromira"]
+DEFAULT_SERVICES = ["HidromiraService", "Monitor Streamlit", "API REST", "Hidromira"]
 
 def is_admin():
     try:
