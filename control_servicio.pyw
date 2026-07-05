@@ -4,6 +4,8 @@ import subprocess
 import ctypes
 import sys
 import os
+import webbrowser
+import time
 
 # Nombre del servicio por defecto
 DEFAULT_SERVICES = ["HidromiraService", "Monitor Streamlit", "API REST", "Hidromira"]
@@ -29,7 +31,7 @@ class ServiceControlApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Control de Servicio - Hidromira")
-        self.root.geometry("450x380")
+        self.root.geometry("460x470")
         self.root.resizable(False, False)
         
         # Paleta de colores Premium Oscura
@@ -40,6 +42,7 @@ class ServiceControlApp:
         self.accent_green = "#00c853"
         self.accent_red = "#d50000"
         self.accent_gray = "#8e8e93"
+        self.accent_orange = "#ff9100"
         
         self.root.configure(bg=self.bg_color)
         
@@ -50,7 +53,7 @@ class ServiceControlApp:
         style.configure("TCombobox", fieldbackground=self.card_color, background=self.bg_color, foreground=self.text_color)
         
         # Encabezado Principal
-        header_frame = tk.Frame(self.root, bg=self.bg_color, pady=15)
+        header_frame = tk.Frame(self.root, bg=self.bg_color, pady=12)
         header_frame.pack(fill="x")
         
         lbl_title = tk.Label(
@@ -73,10 +76,10 @@ class ServiceControlApp:
         
         # Separador
         separator = tk.Frame(self.root, height=2, bd=0, bg=self.card_color)
-        separator.pack(fill="x", padx=20, pady=5)
+        separator.pack(fill="x", padx=20, pady=2)
         
         # Panel de Control
-        control_frame = tk.Frame(self.root, bg=self.bg_color, padx=30, pady=15)
+        control_frame = tk.Frame(self.root, bg=self.bg_color, padx=30, pady=10)
         control_frame.pack(fill="both", expand=True)
         
         # Selector de Servicio
@@ -91,11 +94,55 @@ class ServiceControlApp:
         
         # Indicador de Estado
         lbl_status_title = tk.Label(control_frame, text="Estado Actual:", font=("Segoe UI", 10, "bold"), bg=self.bg_color, fg=self.text_color)
-        lbl_status_title.grid(row=1, column=0, sticky="w", pady=15)
+        lbl_status_title.grid(row=1, column=0, sticky="w", pady=5)
         
         self.lbl_status = tk.Label(control_frame, text="Consultando...", font=("Segoe UI", 11, "bold"), bg=self.bg_color, fg=self.accent_gray)
-        self.lbl_status.grid(row=1, column=1, sticky="w", pady=15, padx=10)
+        self.lbl_status.grid(row=1, column=1, sticky="w", pady=5, padx=10)
         
+        # Mensaje de advertencia
+        self.lbl_warning = tk.Label(
+            control_frame, 
+            text="⚠️ Nota: Para encender el monitoreo debe cerrar el software WitMotion.",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.bg_color,
+            fg=self.accent_orange,
+            wraplength=380,
+            justify="center"
+        )
+        self.lbl_warning.grid(row=2, column=0, columnspan=3, pady=10, sticky="ew")
+
+        # Panel de Opciones (Checkboxes)
+        options_frame = tk.Frame(control_frame, bg=self.bg_color)
+        options_frame.grid(row=3, column=0, columnspan=3, pady=5, sticky="ew")
+
+        self.open_browser_var = tk.BooleanVar(value=True)
+        self.chk_browser = tk.Checkbutton(
+            options_frame, 
+            text="Abrir navegador (http://localhost:8501/) al arrancar",
+            variable=self.open_browser_var,
+            bg=self.bg_color,
+            fg=self.text_color,
+            selectcolor=self.bg_color,
+            activebackground=self.bg_color,
+            activeforeground=self.text_color,
+            font=("Segoe UI", 9)
+        )
+        self.chk_browser.pack(anchor="w", pady=2)
+
+        self.open_witmotion_var = tk.BooleanVar(value=True)
+        self.chk_witmotion = tk.Checkbutton(
+            options_frame, 
+            text="Abrir software WitMotion al detener",
+            variable=self.open_witmotion_var,
+            bg=self.bg_color,
+            fg=self.text_color,
+            selectcolor=self.bg_color,
+            activebackground=self.bg_color,
+            activeforeground=self.text_color,
+            font=("Segoe UI", 9)
+        )
+        self.chk_witmotion.pack(anchor="w", pady=2)
+
         # Botones de Acción
         self.btn_start = tk.Button(
             control_frame, 
@@ -110,7 +157,7 @@ class ServiceControlApp:
             height=2,
             cursor="hand2"
         )
-        self.btn_start.grid(row=2, column=0, columnspan=3, sticky="ew", pady=5)
+        self.btn_start.grid(row=4, column=0, columnspan=3, sticky="ew", pady=5)
         
         self.btn_stop = tk.Button(
             control_frame, 
@@ -125,7 +172,7 @@ class ServiceControlApp:
             height=2,
             cursor="hand2"
         )
-        self.btn_stop.grid(row=3, column=0, columnspan=3, sticky="ew", pady=5)
+        self.btn_stop.grid(row=5, column=0, columnspan=3, sticky="ew", pady=5)
         
         # Barra de estado inferior
         self.lbl_info = tk.Label(
@@ -203,6 +250,12 @@ class ServiceControlApp:
             )
             if res.returncode == 0 or "already running" in res.stderr:
                 self.lbl_info.config(text=f"Servicio '{service_name}' iniciado correctamente.", fg=self.accent_green)
+                # Abrir el navegador si está seleccionado
+                if self.open_browser_var.get():
+                    self.lbl_status.config(text="ABRIENDO WEB...", fg=self.accent_blue)
+                    self.root.update_idletasks()
+                    time.sleep(1.0)
+                    webbrowser.open("http://localhost:8501/")
             else:
                 self.lbl_info.config(text=f"Detalle: {res.stderr.strip()}", fg=self.accent_red)
         except Exception as e:
@@ -225,12 +278,33 @@ class ServiceControlApp:
             )
             if res.returncode == 0 or "not running" in res.stderr:
                 self.lbl_info.config(text=f"Servicio '{service_name}' detenido correctamente.", fg=self.accent_green)
+                # Abrir WitMotion si está seleccionado
+                if self.open_witmotion_var.get():
+                    self.launch_witmotion()
             else:
                 self.lbl_info.config(text=f"Detalle: {res.stderr.strip()}", fg=self.accent_red)
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo detener el servicio:\n{str(e)}")
             
         self.update_status()
+
+    def launch_witmotion(self):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        witmotion_path = os.path.join(
+            script_dir, 
+            "Download the WitMotion Software", 
+            "Witmotion(V2025.11.26.0) (1)", 
+            "WitMotion.exe"
+        )
+        if os.path.exists(witmotion_path):
+            try:
+                # Ejecutar WitMotion en segundo plano de manera asíncrona
+                subprocess.Popen([witmotion_path], cwd=os.path.dirname(witmotion_path))
+                self.lbl_info.config(text="Software WitMotion iniciado.", fg=self.accent_green)
+            except Exception as e:
+                self.lbl_info.config(text=f"Error al iniciar WitMotion: {str(e)}", fg=self.accent_red)
+        else:
+            self.lbl_info.config(text="No se encontró WitMotion.exe en la ruta de descargas.", fg=self.accent_red)
 
     def auto_refresh(self):
         self.update_status()
