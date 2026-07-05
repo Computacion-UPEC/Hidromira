@@ -258,21 +258,20 @@ def calcular_rpm(rms_valor, sensor_inst=None):
         fluctuacion = np.random.uniform(-2, 2)
         return max(0.0, min(1200.0, base_sim + fluctuacion))
 
-# ============ NORMA ISO 20816-3 - GRUPO 1 ============
-# Grupo 1: Máquinas pequeñas con soporte rígido
-ZONA_A_MAX = 0.25  # Aceptable
-ZONA_B_MAX = 0.5    # Aceptable con vigilancia
-ZONA_C_MAX = 0.75   # Requiere corrección
-# ZONA_D_MAX = inf   # Inaceptable
+# ============ LÍMITES DE VIBRACIÓN PERSONALIZADOS ============
+ZONA_A_MAX = 1.4    # A - Azul (Excelente)
+ZONA_B_MAX = 3.5    # B - Verde (Satisfactorio)
+ZONA_C_MAX = 4.5    # C - Amarillo (Alerta)
+# ZONA_D_MAX = 11.0 # D - Rojo (Inaceptable)
 
 def clasificar_zona(velocidad):
-    """Clasifica la velocidad según ISO 20816-3 Grupo 1"""
+    """Clasifica la velocidad según límites personalizados"""
     if velocidad <= ZONA_A_MAX:
-        return "A", "#00c853"  # Verde
+        return "A", "#0091ff"  # Azul
     elif velocidad <= ZONA_B_MAX:
-        return "B", "#ffd600"  # Amarillo
+        return "B", "#00c853"  # Verde
     elif velocidad <= ZONA_C_MAX:
-        return "C", "#ff9100"  # Naranja
+        return "C", "#ffd600"  # Amarillo
     else:
         return "D", "#d50000"  # Rojo
 
@@ -518,7 +517,7 @@ st.sidebar.subheader("🎛️ Sensibilidad de Vibración")
 st.session_state.vibration_sensitivity = st.sidebar.slider(
     "Factor de cambio (Multiplicador)",
     min_value=0.1,
-    max_value=10.0,
+    max_value=100.0,
     value=st.session_state.vibration_sensitivity,
     step=0.1,
     help="Multiplica las lecturas de vibración (vx, vy, vz) por este factor para amplificar o atenuar la sensibilidad."
@@ -538,7 +537,7 @@ if page == "⚡ Monitoreo en Tiempo Real":
         st.error("❌ Sensor no disponible - Generando datos de demostración")
         st.warning(f"💡 Para usar el sensor real: Cierra otras apps que usen {st.session_state.sensor_port} y reinicia el monitor")
         
-    st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Norma ISO 20816-3 | Zona A ≤ 0.25 | B ≤ 0.5 | C ≤ 0.75 mm/s")
+    st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Límites Personalizados | Zona A ≤ 1.4 | B ≤ 3.5 | C ≤ 4.5 | D > 4.5 mm/s")
     
     # Leer datos del sensor o generar demostración
     sensor_ok = False

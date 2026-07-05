@@ -236,23 +236,23 @@ def calcular_rpm(rms_valor, sensor_inst=None):
         fluctuacion = np.random.uniform(-2, 2)
         return max(0.0, min(1200.0, base_sim + fluctuacion))
 
-ZONA_A_MAX = 0.25
-ZONA_B_MAX = 0.5
-ZONA_C_MAX = 0.75
+ZONA_A_MAX = 1.4
+ZONA_B_MAX = 3.5
+ZONA_C_MAX = 4.5
 
 def clasificar_zona(velocidad):
     if velocidad <= ZONA_A_MAX:
-        return "A", "#00c853"
+        return "A", "#0091ff"  # Azul
     elif velocidad <= ZONA_B_MAX:
-        return "B", "#ffd600"
+        return "B", "#00c853"  # Verde
     elif velocidad <= ZONA_C_MAX:
-        return "C", "#ff9100"
+        return "C", "#ffd600"  # Amarillo
     else:
-        return "D", "#d50000"
+        return "D", "#d50000"  # Rojo
 
 # ============ LECTURA Y VISUALIZACIÓN ============
 
-st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Norma ISO 20816-3 | Zona A ≤ 0.25 | B ≤ 0.5 | C ≤ 0.75 mm/s")
+st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Límites Personalizados | Zona A ≤ 1.4 | B ≤ 3.5 | C ≤ 4.5 | D > 4.5 mm/s")
 
 # Leer datos del sensor o generar demostración
 sensor_ok = False
@@ -281,6 +281,12 @@ else:
     vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
     vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
     vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
+# Aplicar factor de sensibilidad de vibración si está en session_state
+if 'vibration_sensitivity' in st.session_state:
+    sens_factor = st.session_state.vibration_sensitivity
+    vx *= sens_factor
+    vy *= sens_factor
+    vz *= sens_factor
 
 # Agregar a buffers
 st.session_state.buffer_x.append(vx)

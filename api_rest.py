@@ -116,11 +116,11 @@ def estadisticas():
     vz_vals = [d['vz'] for d in datos if 'vz' in d]
     
     def clasificar_zona(v):
-        if v <= 0.25:
+        if v <= 1.4:
             return 'A'
-        elif v <= 0.5:
+        elif v <= 3.5:
             return 'B'
-        elif v <= 0.75:
+        elif v <= 4.5:
             return 'C'
         else:
             return 'D'
@@ -169,11 +169,11 @@ def alertas():
         return jsonify({'error': 'No hay datos disponibles'}), 404
     
     def clasificar_zona(v):
-        if v <= 0.25:
+        if v <= 1.4:
             return 'A'
-        elif v <= 0.5:
+        elif v <= 3.5:
             return 'B'
-        elif v <= 0.75:
+        elif v <= 4.5:
             return 'C'
         else:
             return 'D'
