@@ -11,4 +11,6 @@ lib/
 include/
 .idea/
 **/_idea/
-**/.idea/
+**/.idea/
+scripts/test_freq.py
+WTVB01_485 python_sdk/
