@@ -111,8 +111,12 @@ if 'sensor_port' not in st.session_state:
     st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
 if 'sensor_scale' not in st.session_state:
     st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
-if 'vibration_sensitivity' not in st.session_state:
-    st.session_state.vibration_sensitivity = 1.0
+if 'vibration_sensitivity_x' not in st.session_state:
+    st.session_state.vibration_sensitivity_x = 1.0
+if 'vibration_sensitivity_y' not in st.session_state:
+    st.session_state.vibration_sensitivity_y = 1.0
+if 'vibration_sensitivity_z' not in st.session_state:
+    st.session_state.vibration_sensitivity_z = 1.0
 
 # Estado del control del motor por serial
 if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
@@ -514,13 +518,29 @@ page = st.sidebar.radio("Ir a la sección:", opciones_menu, index=menu_index)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("🎛️ Sensibilidad de Vibración")
-st.session_state.vibration_sensitivity = st.sidebar.slider(
-    "Factor de cambio (Multiplicador)",
+st.session_state.vibration_sensitivity_x = st.sidebar.slider(
+    "Multiplicador Eje X",
     min_value=0.1,
     max_value=100.0,
-    value=st.session_state.vibration_sensitivity,
+    value=st.session_state.vibration_sensitivity_x,
     step=0.1,
-    help="Multiplica las lecturas de vibración (vx, vy, vz) por este factor para amplificar o atenuar la sensibilidad."
+    help="Multiplica la vibración del eje X (vx) por este factor."
+)
+st.session_state.vibration_sensitivity_y = st.sidebar.slider(
+    "Multiplicador Eje Y",
+    min_value=0.1,
+    max_value=100.0,
+    value=st.session_state.vibration_sensitivity_y,
+    step=0.1,
+    help="Multiplica la vibración del eje Y (vy) por este factor."
+)
+st.session_state.vibration_sensitivity_z = st.sidebar.slider(
+    "Multiplicador Eje Z",
+    min_value=0.1,
+    max_value=100.0,
+    value=st.session_state.vibration_sensitivity_z,
+    step=0.1,
+    help="Multiplica la vibración del eje Z (vz) por este factor."
 )
 
 
@@ -562,11 +582,10 @@ if page == "⚡ Monitoreo en Tiempo Real":
         vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
         vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
         
-    # Aplicar factor de sensibilidad de vibración
-    sens_factor = st.session_state.vibration_sensitivity
-    vx *= sens_factor
-    vy *= sens_factor
-    vz *= sens_factor
+    # Aplicar factor de sensibilidad de vibración por eje
+    vx *= st.session_state.vibration_sensitivity_x
+    vy *= st.session_state.vibration_sensitivity_y
+    vz *= st.session_state.vibration_sensitivity_z
 
     st.session_state.buffer_x.append(vx)
     st.session_state.buffer_y.append(vy)

@@ -281,12 +281,10 @@ else:
     vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
     vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
     vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
-# Aplicar factor de sensibilidad de vibración si está en session_state
-if 'vibration_sensitivity' in st.session_state:
-    sens_factor = st.session_state.vibration_sensitivity
-    vx *= sens_factor
-    vy *= sens_factor
-    vz *= sens_factor
+# Aplicar factor de sensibilidad de vibración por eje si está en session_state
+vx *= st.session_state.get('vibration_sensitivity_x', 1.0)
+vy *= st.session_state.get('vibration_sensitivity_y', 1.0)
+vz *= st.session_state.get('vibration_sensitivity_z', 1.0)
 
 # Agregar a buffers
 st.session_state.buffer_x.append(vx)
