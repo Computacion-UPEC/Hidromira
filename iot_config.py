@@ -95,3 +95,41 @@ DB_NAME = "hidromira"
 DB_USER = "postgres"
 DB_PASSWORD = "tu_password_aqui"
 
+
+def load_motor_status():
+    import os
+    import json
+    path = os.path.join(os.path.dirname(__file__), 'motor_status.json')
+    if os.path.exists(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return {
+                    'motor_speed': data.get('motor_speed', 0),
+                    'motor_mode': data.get('motor_mode', 'Detenido'),
+                    'servo_angle': data.get('servo_angle', 95)
+                }
+        except Exception:
+            pass
+    return {
+        'motor_speed': 0,
+        'motor_mode': 'Detenido',
+        'servo_angle': 95
+    }
+
+
+def save_motor_status(motor_speed, motor_mode, servo_angle=95):
+    import os
+    import json
+    path = os.path.join(os.path.dirname(__file__), 'motor_status.json')
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'motor_speed': int(motor_speed),
+                'motor_mode': str(motor_mode),
+                'servo_angle': int(servo_angle)
+            }, f, indent=2)
+        return True
+    except Exception:
+        return False
+

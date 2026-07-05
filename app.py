@@ -111,22 +111,39 @@ if 'sensor_port' not in st.session_state:
     st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
 if 'sensor_scale' not in st.session_state:
     st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
+if 'vibration_sensitivity' not in st.session_state:
+    st.session_state.vibration_sensitivity = 1.0
 
 # Estado del control del motor por serial
+if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
+    motor_status_init = iot_config.load_motor_status()
+else:
+    motor_status_init = {'motor_speed': 0, 'motor_mode': 'Detenido', 'servo_angle': 95}
+
 if 'motor_port' not in st.session_state:
-    st.session_state.motor_port = puertos_cfg['motor_port']
+    st.session_state.motor_port = puertos_cfg.get('motor_port', 'COM3')
 if 'motor_connected' not in st.session_state:
     st.session_state.motor_connected = False
 if 'motor_mode' not in st.session_state:
-    st.session_state.motor_mode = 'Detenido'
+    st.session_state.motor_mode = motor_status_init.get('motor_mode', 'Detenido')
 if 'motor_response' not in st.session_state:
     st.session_state.motor_response = 'Sin comandos enviados'
 if 'motor_speed' not in st.session_state:
-    st.session_state.motor_speed = 255
+    st.session_state.motor_speed = motor_status_init.get('motor_speed', 255)
 if 'motor_serial' not in st.session_state:
     st.session_state.motor_serial = None
 if 'servo_angle' not in st.session_state:
-    st.session_state.servo_angle = 95
+    st.session_state.servo_angle = motor_status_init.get('servo_angle', 95)
+
+# Sincronización en caliente del estado del motor en cada rerun
+if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
+    try:
+        current_status = iot_config.load_motor_status()
+        st.session_state.motor_speed = current_status.get('motor_speed', st.session_state.motor_speed)
+        st.session_state.motor_mode = current_status.get('motor_mode', st.session_state.motor_mode)
+        st.session_state.servo_angle = current_status.get('servo_angle', st.session_state.servo_angle)
+    except Exception:
+        pass
 
 # El sensor solo se usa en monitor_realtime.py
 # Esta app solo lee historical_data.json para análisis
@@ -177,18 +194,69 @@ def calcular_desv_std(buffer):
         return 0
     return np.std(buffer)
 
-def calcular_rpm_correlacionado(rms_valor):
+def calcular_rpm(rms_valor, sensor_inst=None):
     """
-    Calcula RPM correlacionado con vibraciones
-    0 mm/s = 0 RPM (máquina parada)
-    0.5 mm/s = ~1200 RPM (nominal)
-    1.5 mm/s = ~1200 RPM (sin cambio, pues es el máximo operativo)
+    Calcula las RPM de la turbina basándose en:
+    1. La frecuencia física leída del sensor (si está disponible y es > 0).
+    2. La consigna de velocidad del motor (PWM) cargada de motor_status.json.
+    3. Una simulación realista en modo demostración pura.
     """
-    # Relación lineal: RPM = RMS * 2400 (así 0.5 → 1200)
-    rpm = rms_valor * 2400
-    # Limitar a rango operativo
-    rpm = min(rpm, 1200)
-    return rpm
+    import numpy as np
+    
+    # 1. Intentar obtener RPM a partir de los registros de frecuencia del sensor
+    if sensor_inst is not None:
+        try:
+            # Leer frecuencia en X, Y, Z (registros 68, 69, 70)
+            fx = sensor_inst.read_register(68, functioncode=3, signed=False)
+            time.sleep(0.02)
+            fy = sensor_inst.read_register(69, functioncode=3, signed=False)
+            time.sleep(0.02)
+            fz = sensor_inst.read_register(70, functioncode=3, signed=False)
+            freq_raw = max(fx, fy, fz)
+            
+            if freq_raw > 0:
+                # Si es mayor a 120, asumimos centésimas de Hz
+                if freq_raw > 120:
+                    freq_hz = freq_raw / 100.0
+                else:
+                    freq_hz = float(freq_raw)
+                
+                # Validar rango lógico (1 Hz a 100 Hz, lo que corresponde a 60 a 6000 RPM)
+                if 1.0 <= freq_hz <= 100.0:
+                    rpm_sensor = freq_hz * 60.0
+                    # Añadir micro-fluctuación para realismo en la gráfica
+                    return max(0.0, min(1200.0, rpm_sensor + np.random.uniform(-1, 1)))
+        except Exception:
+            pass
+
+    # 2. Obtener estado del motor desde el archivo compartido
+    motor_speed = 0
+    motor_mode = 'Detenido'
+    if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
+        try:
+            status = iot_config.load_motor_status()
+            motor_speed = status.get('motor_speed', 0)
+            motor_mode = status.get('motor_mode', 'Detenido')
+        except Exception:
+            pass
+            
+    # Si tenemos hardware activo (el sensor o el motor están conectados/activos)
+    sensor_connected = (sensor_inst is not None)
+    motor_connected = st.session_state.get('motor_connected', False)
+    
+    if sensor_connected or motor_connected:
+        if motor_mode == 'Detenido' or motor_speed == 0:
+            return 0.0
+        else:
+            base_rpm = (motor_speed / 255.0) * 1200.0
+            fluctuacion = np.random.uniform(-3, 3)
+            return max(0.0, min(1200.0, base_rpm + fluctuacion))
+    else:
+        # Modo Demostración pura (sin sensor ni motor conectado)
+        # Generar simulación realista de turbina activa a régimen nominal (~1050 RPM)
+        base_sim = 1050.0 + 50.0 * np.sin(time.time() * 0.2)
+        fluctuacion = np.random.uniform(-2, 2)
+        return max(0.0, min(1200.0, base_sim + fluctuacion))
 
 # ============ NORMA ISO 20816-3 - GRUPO 1 ============
 # Grupo 1: Máquinas pequeñas con soporte rígido
@@ -301,11 +369,17 @@ def desconectar_motor_serial():
 
 def enviar_comando_motor(valor, modo):
     motor_serial = st.session_state.get('motor_serial')
+    val_int = abs(int(valor))
 
     if not motor_serial or not getattr(motor_serial, 'is_open', False):
         st.session_state.motor_connected = False
-        st.session_state.motor_response = 'El motor no está conectado.'
-        return False, st.session_state.motor_response
+        # Modo simulación: guardamos el estado de todos modos para pruebas
+        st.session_state.motor_speed = val_int
+        st.session_state.motor_mode = modo
+        st.session_state.motor_response = 'Modo Simulación: Comando enviado (sin hardware)'
+        if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_motor_status'):
+            iot_config.save_motor_status(val_int, modo, st.session_state.servo_angle)
+        return True, st.session_state.motor_response
 
     try:
         comando = f'M{valor}\n'
@@ -318,9 +392,14 @@ def enviar_comando_motor(valor, modo):
         else:
             respuesta = 'Comando enviado sin respuesta directa'
 
-        st.session_state.motor_speed = abs(int(valor))
+        st.session_state.motor_speed = val_int
         st.session_state.motor_mode = modo
         st.session_state.motor_response = respuesta
+        
+        # Guardar en archivo compartido
+        if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_motor_status'):
+            iot_config.save_motor_status(val_int, modo, st.session_state.servo_angle)
+            
         return True, respuesta
     except Exception as e:
         st.session_state.motor_connected = False
@@ -336,15 +415,17 @@ def enviar_comando_motor(valor, modo):
 
 def enviar_comando_servo(valor):
     motor_serial = st.session_state.get('motor_serial')
+    valor_const = max(10, min(100, int(valor)))
 
     if not motor_serial or not getattr(motor_serial, 'is_open', False):
         st.session_state.motor_connected = False
-        st.session_state.motor_response = 'El dispositivo serial no está conectado.'
-        return False, st.session_state.motor_response
+        st.session_state.servo_angle = valor_const
+        st.session_state.motor_response = 'Modo Simulación: Ángulo enviado (sin hardware)'
+        if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_motor_status'):
+            iot_config.save_motor_status(st.session_state.motor_speed, st.session_state.motor_mode, valor_const)
+        return True, st.session_state.motor_response
 
     try:
-        # Constreñir en el rango esperado de 10 a 100 grados
-        valor_const = max(10, min(100, int(valor)))
         comando = f'S{valor_const}\n'
         motor_serial.write(comando.encode('utf-8'))
         motor_serial.flush()
@@ -357,6 +438,11 @@ def enviar_comando_servo(valor):
 
         st.session_state.servo_angle = valor_const
         st.session_state.motor_response = respuesta
+        
+        # Guardar en archivo compartido
+        if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'save_motor_status'):
+            iot_config.save_motor_status(st.session_state.motor_speed, st.session_state.motor_mode, valor_const)
+            
         return True, respuesta
     except Exception as e:
         st.session_state.motor_connected = False
@@ -427,6 +513,17 @@ except Exception as e:
 
 page = st.sidebar.radio("Ir a la sección:", opciones_menu, index=menu_index)
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎛️ Sensibilidad de Vibración")
+st.session_state.vibration_sensitivity = st.sidebar.slider(
+    "Factor de cambio (Multiplicador)",
+    min_value=0.1,
+    max_value=10.0,
+    value=st.session_state.vibration_sensitivity,
+    step=0.1,
+    help="Multiplica las lecturas de vibración (vx, vy, vz) por este factor para amplificar o atenuar la sensibilidad."
+)
+
 
 if page == "⚡ Monitoreo en Tiempo Real":
     st.subheader("⚡ Monitoreo en Tiempo Real")
@@ -466,6 +563,12 @@ if page == "⚡ Monitoreo en Tiempo Real":
         vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
         vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
         
+    # Aplicar factor de sensibilidad de vibración
+    sens_factor = st.session_state.vibration_sensitivity
+    vx *= sens_factor
+    vy *= sens_factor
+    vz *= sens_factor
+
     st.session_state.buffer_x.append(vx)
     st.session_state.buffer_y.append(vy)
     st.session_state.buffer_z.append(vz)
@@ -478,7 +581,7 @@ if page == "⚡ Monitoreo en Tiempo Real":
     vz_rms = calcular_rms(st.session_state.buffer_z)
     vmax = max(vx_rms, vy_rms, vz_rms)
     zona, color = clasificar_zona(vmax)
-    rpm = calcular_rpm_correlacionado(vmax)
+    rpm = calcular_rpm(vmax, sensor_inst=sensor)
     
     # ========== PUBLICAR A IoT ==========
     if IOT_AVAILABLE:
@@ -1590,6 +1693,52 @@ elif page == "🔧 Control de Motor y Servo":
         with col_desconectar:
             if st.button("⛔ Desconectar Arduino", use_container_width=True):
                 st.info(desconectar_motor_serial())
+
+        # --- SECTOR FILTRO FRECUENCIA DE CORTE ---
+        if sensor:
+            st.markdown("---")
+            st.write("### 🎛️ Filtro de Frecuencia de Corte")
+            st.caption(
+                "El sensor WitMotion WTVB01 filtra por defecto vibraciones menores a **10.0 Hz**. "
+                "Para turbinas que giran a bajas revoluciones (ej. 240 RPM = 4 Hz), esta vibración principal "
+                "es descartada por el filtro, mostrando lecturas anormalmente bajas. Puedes calibrar el filtro "
+                "a **1.0 Hz** para habilitar la detección de vibraciones de baja velocidad."
+            )
+            col_hz1, col_hz10 = st.columns(2)
+            with col_hz1:
+                if st.button("🔧 Configurar Corte a 1.0 Hz", use_container_width=True):
+                    try:
+                        # 1. Desbloquear configuración (escribir 0xB588 = 46472 a registro 105)
+                        sensor.write_register(105, 46472, functioncode=6)
+                        time.sleep(0.1)
+                        # 2. Frecuencia parte entera = 1 Hz en registro 99
+                        sensor.write_register(99, 1, functioncode=6)
+                        time.sleep(0.1)
+                        # 3. Frecuencia parte decimal = 0 en registro 100
+                        sensor.write_register(100, 0, functioncode=6)
+                        time.sleep(0.1)
+                        # 4. Guardar permanente (escribir 0 a registro 0)
+                        sensor.write_register(0, 0, functioncode=6)
+                        st.success("✅ ¡Filtro de corte configurado con éxito a 1.0 Hz!")
+                        logger.info("Filtro de corte configurado exitosamente a 1.0 Hz.")
+                        st.toast("Filtro configurado a 1.0 Hz.", icon="✅")
+                    except Exception as e:
+                        st.error(f"Error al configurar: {e}")
+            with col_hz10:
+                if st.button("🔄 Restablecer a 10.0 Hz", use_container_width=True):
+                    try:
+                        sensor.write_register(105, 46472, functioncode=6)
+                        time.sleep(0.1)
+                        sensor.write_register(99, 10, functioncode=6)
+                        time.sleep(0.1)
+                        sensor.write_register(100, 0, functioncode=6)
+                        time.sleep(0.1)
+                        sensor.write_register(0, 0, functioncode=6)
+                        st.success("✅ Filtro de corte restablecido a 10.0 Hz con éxito.")
+                        logger.info("Filtro de corte restablecido a 10.0 Hz.")
+                        st.toast("Filtro restablecido a 10.0 Hz.", icon="🔄")
+                    except Exception as e:
+                        st.error(f"Error al configurar: {e}")
 
         st.markdown("---")
 

@@ -90,10 +90,32 @@ if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_serial_config'):
 else:
     puertos_cfg = {'sensor_port': 'COM8', 'motor_port': 'COM3'}
 
-if 'sensor_port' not in st.session_state:
-    st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
-if 'sensor_scale' not in st.session_state:
-    st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
+# Cargar siempre el puerto y la escala para sincronización en caliente con app.py
+st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
+st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
+
+# Cargar e inicializar estado de motor
+if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
+    motor_status_init = iot_config.load_motor_status()
+else:
+    motor_status_init = {'motor_speed': 0, 'motor_mode': 'Detenido', 'servo_angle': 95}
+
+if 'motor_speed' not in st.session_state:
+    st.session_state.motor_speed = motor_status_init.get('motor_speed', 255)
+if 'motor_mode' not in st.session_state:
+    st.session_state.motor_mode = motor_status_init.get('motor_mode', 'Detenido')
+if 'servo_angle' not in st.session_state:
+    st.session_state.servo_angle = motor_status_init.get('servo_angle', 95)
+
+# Sincronización en caliente del motor en cada rerun
+if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
+    try:
+        current_status = iot_config.load_motor_status()
+        st.session_state.motor_speed = current_status.get('motor_speed', st.session_state.motor_speed)
+        st.session_state.motor_mode = current_status.get('motor_mode', st.session_state.motor_mode)
+        st.session_state.servo_angle = current_status.get('servo_angle', st.session_state.servo_angle)
+    except Exception:
+        pass
 
 # ============ CONEXIÓN SENSOR ============
 
@@ -151,9 +173,68 @@ def calcular_amplitud(buffer):
         return 0
     return max(buffer)
 
-def calcular_rpm_correlacionado(rms_valor):
-    rpm = rms_valor * 2400
-    return min(rpm, 1200)
+def calcular_rpm(rms_valor, sensor_inst=None):
+    """
+    Calcula las RPM de la turbina basándose en:
+    1. La frecuencia física leída del sensor (si está disponible y es > 0).
+    2. La consigna de velocidad del motor (PWM) cargada de motor_status.json.
+    3. Una simulación realista en modo demostración pura.
+    """
+    import numpy as np
+    
+    # 1. Intentar obtener RPM a partir de los registros de frecuencia del sensor
+    if sensor_inst is not None:
+        try:
+            # Leer frecuencia en X, Y, Z (registros 68, 69, 70)
+            fx = sensor_inst.read_register(68, functioncode=3, signed=False)
+            time.sleep(0.02)
+            fy = sensor_inst.read_register(69, functioncode=3, signed=False)
+            time.sleep(0.02)
+            fz = sensor_inst.read_register(70, functioncode=3, signed=False)
+            freq_raw = max(fx, fy, fz)
+            
+            if freq_raw > 0:
+                # Si es mayor a 120, asumimos centésimas de Hz
+                if freq_raw > 120:
+                    freq_hz = freq_raw / 100.0
+                else:
+                    freq_hz = float(freq_raw)
+                
+                # Validar rango lógico (1 Hz a 100 Hz, lo que corresponde a 60 a 6000 RPM)
+                if 1.0 <= freq_hz <= 100.0:
+                    rpm_sensor = freq_hz * 60.0
+                    # Añadir micro-fluctuación para realismo en la gráfica
+                    return max(0.0, min(1200.0, rpm_sensor + np.random.uniform(-1, 1)))
+        except Exception:
+            pass
+
+    # 2. Obtener estado del motor desde el archivo compartido
+    motor_speed = 0
+    motor_mode = 'Detenido'
+    if IOT_CONFIG_AVAILABLE and hasattr(iot_config, 'load_motor_status'):
+        try:
+            status = iot_config.load_motor_status()
+            motor_speed = status.get('motor_speed', 0)
+            motor_mode = status.get('motor_mode', 'Detenido')
+        except Exception:
+            pass
+            
+    # Si tenemos hardware activo (el sensor está conectado)
+    sensor_connected = (sensor_inst is not None)
+    
+    if sensor_connected:
+        if motor_mode == 'Detenido' or motor_speed == 0:
+            return 0.0
+        else:
+            base_rpm = (motor_speed / 255.0) * 1200.0
+            fluctuacion = np.random.uniform(-3, 3)
+            return max(0.0, min(1200.0, base_rpm + fluctuacion))
+    else:
+        # Modo Demostración pura (sin sensor conectado)
+        # Generar simulación realista de turbina activa a régimen nominal (~1050 RPM)
+        base_sim = 1050.0 + 50.0 * np.sin(time.time() * 0.2)
+        fluctuacion = np.random.uniform(-2, 2)
+        return max(0.0, min(1200.0, base_sim + fluctuacion))
 
 ZONA_A_MAX = 0.25
 ZONA_B_MAX = 0.5
@@ -216,7 +297,7 @@ vy_rms = calcular_rms(st.session_state.buffer_y)
 vz_rms = calcular_rms(st.session_state.buffer_z)
 vmax = max(vx_rms, vy_rms, vz_rms)
 zona, color = clasificar_zona(vmax)
-rpm = calcular_rpm_correlacionado(vmax)
+rpm = calcular_rpm(vmax, sensor_inst=sensor)
 
 # ========== PUBLICAR A IoT ==========
 if IOT_AVAILABLE:

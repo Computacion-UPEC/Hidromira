@@ -11,9 +11,9 @@
   "X displacement amplitude": {"addr": null, "scale": 1000.0, "signed": false, "unit": "um"},
   "Y displacement amplitude": {"addr": null, "scale": 1000.0, "signed": false, "unit": "um"},
   "Z displacement amplitude": {"addr": null, "scale": 1000.0, "signed": false, "unit": "um"},
-  "X frequency": {"addr": null, "scale": 1.0, "signed": false, "unit": "Hz"},
-  "Y frequency": {"addr": null, "scale": 1.0, "signed": false, "unit": "Hz"},
-  "Z frequency": {"addr": null, "scale": 1.0, "signed": false, "unit": "Hz"},
+  "X frequency": {"addr": 68, "scale": 1.0, "signed": false, "unit": "Hz"},
+  "Y frequency": {"addr": 69, "scale": 1.0, "signed": false, "unit": "Hz"},
+  "Z frequency": {"addr": 70, "scale": 1.0, "signed": false, "unit": "Hz"},
   "Temperature": {"addr": null, "scale": 100.0, "signed": false, "unit": "°C"},
   "Version": {"addr": null, "scale": 1.0, "signed": false, "unit": ""}
 }
