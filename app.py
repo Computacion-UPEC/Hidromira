@@ -70,6 +70,13 @@ if 'buffer_z' not in st.session_state:
     st.session_state.buffer_z = deque([0]*50, maxlen=50)
 if 'buffer_rpm' not in st.session_state:
     st.session_state.buffer_rpm = deque([0]*50, maxlen=50)
+# Buffers para amplitud de desplazamiento (registros 65-67), análogos a los de velocidad
+if 'buffer_dispx' not in st.session_state:
+    st.session_state.buffer_dispx = deque([0]*50, maxlen=50)
+if 'buffer_dispy' not in st.session_state:
+    st.session_state.buffer_dispy = deque([0]*50, maxlen=50)
+if 'buffer_dispz' not in st.session_state:
+    st.session_state.buffer_dispz = deque([0]*50, maxlen=50)
 
 # Historial completo para análisis (SOLO para Tab 2, 3, 4)
 if 'all_readings' not in st.session_state:
@@ -110,7 +117,9 @@ else:
 if 'sensor_port' not in st.session_state:
     st.session_state.sensor_port = puertos_cfg.get('sensor_port', 'COM8')
 if 'sensor_scale' not in st.session_state:
-    st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 100.0)
+    # WTVB01-485: los registros 58-60 (VX/VY/VZ, amplitud de velocidad) ya vienen en mm/s
+    # directos según el firmware oficial (sin divisor). Ver iot_config.SENSOR_SCALE_DEFAULT.
+    st.session_state.sensor_scale = puertos_cfg.get('sensor_scale', 1.0)
 if 'vibration_sensitivity_x' not in st.session_state:
     st.session_state.vibration_sensitivity_x = 1.0
 if 'vibration_sensitivity_y' not in st.session_state:
@@ -178,6 +187,10 @@ verificar_respaldo_automatico()
 
 # ============ FUNCIONES DE CÁLCULO ============
 
+def to_signed16(raw):
+    """Convierte un registro Modbus de 16 bits sin signo a su valor con signo (complemento a 2)."""
+    return raw - 65536 if raw > 32767 else raw
+
 def calcular_amplitud(buffer):
     if not buffer or len(buffer) == 0:
         return 0
@@ -198,33 +211,40 @@ def calcular_desv_std(buffer):
         return 0
     return np.std(buffer)
 
-def calcular_rpm(rms_valor, sensor_inst=None):
+def calcular_rpm(rms_valor, sensor_inst=None, freq_hz_override=None):
     """
     Calcula las RPM de la turbina basándose en:
     1. La frecuencia física leída del sensor (si está disponible y es > 0).
     2. La consigna de velocidad del motor (PWM) cargada de motor_status.json.
     3. Una simulación realista en modo demostración pura.
+
+    Si ya se leyó la frecuencia en el mismo ciclo (freq_hz_override), se reutiliza
+    ese valor en vez de volver a consultar el sensor por serial (evita una segunda
+    transacción Modbus redundante).
     """
     import numpy as np
-    
-    # 1. Intentar obtener RPM a partir de los registros de frecuencia del sensor
-    if sensor_inst is not None:
+
+    # 1. Intentar obtener RPM a partir de la frecuencia del sensor
+    if freq_hz_override is not None or sensor_inst is not None:
         try:
-            # Leer frecuencia en X, Y, Z (registros 68, 69, 70)
-            fx = sensor_inst.read_register(68, functioncode=3, signed=False)
-            time.sleep(0.02)
-            fy = sensor_inst.read_register(69, functioncode=3, signed=False)
-            time.sleep(0.02)
-            fz = sensor_inst.read_register(70, functioncode=3, signed=False)
-            freq_raw = max(fx, fy, fz)
-            
+            if freq_hz_override is not None:
+                freq_raw = freq_hz_override
+            else:
+                # Leer frecuencia en X, Y, Z (registros 68, 69, 70)
+                fx = sensor_inst.read_register(68, functioncode=3, signed=False)
+                time.sleep(0.02)
+                fy = sensor_inst.read_register(69, functioncode=3, signed=False)
+                time.sleep(0.02)
+                fz = sensor_inst.read_register(70, functioncode=3, signed=False)
+                freq_raw = max(fx, fy, fz)
+
             if freq_raw > 0:
                 # Si es mayor a 120, asumimos centésimas de Hz
                 if freq_raw > 120:
                     freq_hz = freq_raw / 100.0
                 else:
                     freq_hz = float(freq_raw)
-                
+
                 # Validar rango lógico (1 Hz a 100 Hz, lo que corresponde a 60 a 6000 RPM)
                 if 1.0 <= freq_hz <= 100.0:
                     rpm_sensor = freq_hz * 60.0
@@ -560,14 +580,30 @@ if page == "⚡ Monitoreo en Tiempo Real":
     st.caption("🏭 Máquina: Grupo 1 (Soporte Rígido) | Límites Personalizados | Zona A ≤ 1.4 | B ≤ 3.5 | C ≤ 4.5 | D > 4.5 mm/s")
     
     # Leer datos del sensor o generar demostración
+    # Se leen los registros 52-70 en UNA sola transacción Modbus (bloque contiguo del
+    # WTVB01-485: Aceleración, Velocidad angular, Velocidad/amplitud, Ángulo, Temperatura,
+    # Desplazamiento/amplitud y Frecuencia), en vez de una lectura separada por cada dato.
     sensor_ok = False
     if sensor:
         try:
-            vx = sensor.read_register(58, functioncode=3, signed=True) / st.session_state.sensor_scale
-            time.sleep(0.05)
-            vy = sensor.read_register(59, functioncode=3, signed=True) / st.session_state.sensor_scale
-            time.sleep(0.05)
-            vz = sensor.read_register(60, functioncode=3, signed=True) / st.session_state.sensor_scale
+            regs = sensor.read_registers(52, 19, functioncode=3)
+            acc_x = to_signed16(regs[0]) / 2048.0
+            acc_y = to_signed16(regs[1]) / 2048.0
+            acc_z = to_signed16(regs[2]) / 2048.0
+            angvel_x = to_signed16(regs[3]) / 16.384
+            angvel_y = to_signed16(regs[4]) / 16.384
+            angvel_z = to_signed16(regs[5]) / 16.384
+            vx = to_signed16(regs[6]) / st.session_state.sensor_scale
+            vy = to_signed16(regs[7]) / st.session_state.sensor_scale
+            vz = to_signed16(regs[8]) / st.session_state.sensor_scale
+            # regs[9..11] = ángulos Roll/Pitch/Yaw (0x3D-0x3F), no son datos de vibración
+            temp = to_signed16(regs[12]) / 100.0
+            disp_x = float(to_signed16(regs[13]))
+            disp_y = float(to_signed16(regs[14]))
+            disp_z = float(to_signed16(regs[15]))
+            freq_x = regs[16]
+            freq_y = regs[17]
+            freq_z = regs[18]
             sensor_ok = True
         except Exception as e:
             error_msg = str(e)
@@ -577,11 +613,33 @@ if page == "⚡ Monitoreo en Tiempo Real":
             vx = 0.15 + 0.05 * np.sin(time.time() * 0.5)
             vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
             vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
+            acc_x = 0.02 * np.sin(time.time() * 0.9)
+            acc_y = 0.02 * np.cos(time.time() * 0.9)
+            acc_z = 0.98 + 0.01 * np.sin(time.time() * 0.3)
+            angvel_x = 1.0 * np.sin(time.time() * 0.4)
+            angvel_y = 1.0 * np.cos(time.time() * 0.4)
+            angvel_z = 0.2 * np.sin(time.time() * 0.6)
+            temp = 45.0 + 2.0 * np.sin(time.time() * 0.05)
+            disp_x = 10.0 + 3.0 * np.sin(time.time() * 0.5)
+            disp_y = 6.0 + 2.0 * np.cos(time.time() * 0.5)
+            disp_z = 8.0 + 2.0 * np.sin(time.time() * 0.7)
+            freq_x, freq_y, freq_z = 27, 41, 32
     else:
         vx = 0.15 + 0.05 * np.sin(time.time() * 0.5)
         vy = 0.12 + 0.04 * np.cos(time.time() * 0.5)
         vz = 0.08 + 0.03 * np.sin(time.time() * 0.7)
-        
+        acc_x = 0.02 * np.sin(time.time() * 0.9)
+        acc_y = 0.02 * np.cos(time.time() * 0.9)
+        acc_z = 0.98 + 0.01 * np.sin(time.time() * 0.3)
+        angvel_x = 1.0 * np.sin(time.time() * 0.4)
+        angvel_y = 1.0 * np.cos(time.time() * 0.4)
+        angvel_z = 0.2 * np.sin(time.time() * 0.6)
+        temp = 45.0 + 2.0 * np.sin(time.time() * 0.05)
+        disp_x = 10.0 + 3.0 * np.sin(time.time() * 0.5)
+        disp_y = 6.0 + 2.0 * np.cos(time.time() * 0.5)
+        disp_z = 8.0 + 2.0 * np.sin(time.time() * 0.7)
+        freq_x, freq_y, freq_z = 27, 41, 32
+
     # Aplicar factor de sensibilidad de vibración por eje
     vx *= st.session_state.vibration_sensitivity_x
     vy *= st.session_state.vibration_sensitivity_y
@@ -590,6 +648,9 @@ if page == "⚡ Monitoreo en Tiempo Real":
     st.session_state.buffer_x.append(vx)
     st.session_state.buffer_y.append(vy)
     st.session_state.buffer_z.append(vz)
+    st.session_state.buffer_dispx.append(disp_x)
+    st.session_state.buffer_dispy.append(disp_y)
+    st.session_state.buffer_dispz.append(disp_z)
     
     rec = {'vx': vx, 'vy': vy, 'vz': vz, 'ts': datetime.utcnow().isoformat() + 'Z'}
     st.session_state.all_readings.append(rec)
@@ -599,7 +660,8 @@ if page == "⚡ Monitoreo en Tiempo Real":
     vz_rms = calcular_rms(st.session_state.buffer_z)
     vmax = max(vx_rms, vy_rms, vz_rms)
     zona, color = clasificar_zona(vmax)
-    rpm = calcular_rpm(vmax, sensor_inst=sensor)
+    freq_raw_rpm = max(freq_x, freq_y, freq_z) if sensor_ok else None
+    rpm = calcular_rpm(vmax, sensor_inst=sensor, freq_hz_override=freq_raw_rpm)
     
     # ========== PUBLICAR A IoT ==========
     if IOT_AVAILABLE:
@@ -822,11 +884,48 @@ if page == "⚡ Monitoreo en Tiempo Real":
                                 line=dict(color='#ffd700', width=3), name='RPM',
                                 fill='tozeroy'))
     fig_rpm.add_hline(y=1200, line_dash="dash", line_color="green", annotation_text="RPM Nominal (1200)")
-    fig_rpm.update_layout(template="plotly_dark", height=350, 
+    fig_rpm.update_layout(template="plotly_dark", height=350,
                          yaxis=dict(range=[0, 1300], title="RPM"),
                          xaxis_title="Tiempo")
     st.plotly_chart(fig_rpm, width='stretch')
-    
+
+    # ========== TODOS LOS CAMPOS DEL SENSOR WTVB01-485 ==========
+    st.markdown("---")
+    st.subheader("📋 Todos los Parámetros del Sensor")
+
+    col_acc, col_ang, col_temp = st.columns(3)
+    with col_acc:
+        st.caption("🧭 Aceleración")
+        st.metric("X", f"{acc_x:.3f} g")
+        st.metric("Y", f"{acc_y:.3f} g")
+        st.metric("Z", f"{acc_z:.3f} g")
+    with col_ang:
+        st.caption("🔄 Velocidad Angular")
+        st.metric("X", f"{angvel_x:.2f} °/s")
+        st.metric("Y", f"{angvel_y:.2f} °/s")
+        st.metric("Z", f"{angvel_z:.2f} °/s")
+    with col_temp:
+        st.caption("🌡️ Temperatura")
+        st.metric("Chip", f"{temp:.2f} °C")
+        st.caption("🎼 Frecuencia de Vibración")
+        st.metric("X / Y / Z", f"{freq_x:.0f} / {freq_y:.0f} / {freq_z:.0f} Hz")
+
+    st.caption("📏 Amplitud de Desplazamiento (registros 65-67, análogo a la amplitud de velocidad)")
+    col_dx, col_dy, col_dz = st.columns(3)
+    col_dx.metric("X", f"{disp_x:.1f} µm")
+    col_dy.metric("Y", f"{disp_y:.1f} µm")
+    col_dz.metric("Z", f"{disp_z:.1f} µm")
+
+    fig_disp = go.Figure()
+    fig_disp.add_trace(go.Scatter(y=list(st.session_state.buffer_dispx), mode='lines+markers',
+                                   line=dict(color='#ff6b6b', width=2), name='X'))
+    fig_disp.add_trace(go.Scatter(y=list(st.session_state.buffer_dispy), mode='lines+markers',
+                                   line=dict(color='#51cf66', width=2), name='Y'))
+    fig_disp.add_trace(go.Scatter(y=list(st.session_state.buffer_dispz), mode='lines+markers',
+                                   line=dict(color='#4dabf7', width=2), name='Z'))
+    fig_disp.update_layout(template="plotly_dark", height=300, yaxis=dict(title="Desplazamiento (µm)"))
+    st.plotly_chart(fig_disp, width='stretch')
+
     st.markdown("---")
     col1_f, col2_f, col3_f, col4_f = st.columns(4)
     
@@ -1674,7 +1773,7 @@ elif page == "🔧 Control de Motor y Servo":
         escala_sensor_sel = st.selectbox(
             "Divisor de Escala del Sensor ModBus (Ajuste de Lectura)",
             [1.0, 10.0, 100.0],
-            index=[1.0, 10.0, 100.0].index(st.session_state.sensor_scale) if st.session_state.sensor_scale in [1.0, 10.0, 100.0] else 2,
+            index=[1.0, 10.0, 100.0].index(st.session_state.sensor_scale) if st.session_state.sensor_scale in [1.0, 10.0, 100.0] else 0,
             key="sensor_scale_selector",
             help="1.0 = lectura directa (mm/s crudos). 10.0 = dividir para precisión decimal de décimas. 100.0 = dividir para precisión de centésimas."
         )

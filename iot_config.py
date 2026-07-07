@@ -48,7 +48,7 @@ API_HOST = "0.0.0.0"  # 0.0.0.0 para acceso externo
 # ========== CONFIGURACIÓN DE PUERTOS SERIALES ==========
 SENSOR_PORT_DEFAULT = 'COM8'
 MOTOR_PORT_DEFAULT = 'COM3'
-SENSOR_SCALE_DEFAULT = 100.0
+SENSOR_SCALE_DEFAULT = 1.0  # WTVB01-485: registros 58-60 (VX/VY/VZ) ya vienen en mm/s directos, sin divisor
 
 def load_serial_config():
     import os
