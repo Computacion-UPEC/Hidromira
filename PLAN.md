@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Sector objetivo** | Energía e hidrocarburos · generación hidroeléctrica (CELEC EP, CENACE, CNEL) |
-| **Segmento** | A |
-| **Esfuerzo asignado** | 8 % del tiempo de proyectos (dentro del 15 % de energía e hidrocarburos) |
+| **Segmento** | A (único segmento del plan) |
+| **Esfuerzo asignado** | 16 % del tiempo de proyectos (dentro del 30 % de energía e hidrocarburos) |
 | **Horizonte** | 9-nov-2026 → 31-ene-2027 |
 
 ## Para quién se diseña
