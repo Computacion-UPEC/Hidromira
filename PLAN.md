@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Sector objetivo** | Empresa pública nacional · generación eléctrica (centrales hidroeléctricas) |
+| **Sector objetivo** | Energía e hidrocarburos · generación hidroeléctrica (CELEC EP, CENACE, CNEL) |
 | **Segmento** | A |
-| **Esfuerzo asignado** | 10 % del tiempo de proyectos (dentro del 20 % de energía) |
+| **Esfuerzo asignado** | 8 % del tiempo de proyectos (dentro del 15 % de energía e hidrocarburos) |
 | **Horizonte** | 9-nov-2026 → 31-ene-2027 |
 
 ## Para quién se diseña
